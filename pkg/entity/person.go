@@ -1,4 +1,4 @@
-package ruyfo
+package entity
 
 type Person struct {
 	FirstName                 string    `json:"first_name"`

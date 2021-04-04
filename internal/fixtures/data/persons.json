@@ -16,6 +16,40 @@
         36.169090,
         -115.140580
       ]
+    },
+    {
+      "first_name": "Matt",
+      "last_name": "Down",
+      "email_address": "matt.down@example.com",
+      "maximum_people_with_bikes": 5,
+      "maximum_people_without_bikes": 5,
+      "maximum_bikes_with_people": 3,
+      "maximum_bikes_without_people": 3,
+      "can_drive_thursday_night": true,
+      "can_drive_friday_morning": true,
+      "biking_back_saturday": false,
+      "going_home_friday": false,
+      "coordinates": [
+        40.023858,
+        -90.824512
+      ]
+    },
+    {
+      "first_name": "Stephen",
+      "last_name": "Corn",
+      "email_address": "stephen.corn@example.com",
+      "maximum_people_with_bikes": 5,
+      "maximum_people_without_bikes": 5,
+      "maximum_bikes_with_people": 2,
+      "maximum_bikes_without_people": 2,
+      "can_drive_thursday_night": true,
+      "can_drive_friday_morning": true,
+      "biking_back_saturday": false,
+      "going_home_friday": false,
+      "coordinates": [
+        45.153892,
+        -92.891152
+      ]
     }
   ]
 }

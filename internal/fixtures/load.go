@@ -6,11 +6,11 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
-	"github.com/fantashley/ruyfo-planner/pkg/ruyfo"
+	"github.com/fantashley/ruyfo-planner/pkg/entity"
 )
 
 type Fixtures struct {
-	Persons []ruyfo.Person `json:"persons"`
+	Persons []entity.Person `json:"persons"`
 }
 
 const (
@@ -68,7 +68,7 @@ func (f Fixtures) Combine(newFixture Fixtures) Fixtures {
 
 	if len(newFixture.Persons) > 0 {
 		if len(combinedFixtures.Persons) == 0 {
-			combinedFixtures.Persons = make([]ruyfo.Person, 0, len(newFixture.Persons))
+			combinedFixtures.Persons = make([]entity.Person, 0, len(newFixture.Persons))
 		}
 		combinedFixtures.Persons = append(combinedFixtures.Persons, newFixture.Persons...)
 	}
