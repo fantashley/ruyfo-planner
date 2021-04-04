@@ -1,0 +1,21 @@
+{
+  "persons": [
+    {
+      "first_name": "Ashley",
+      "last_name": "Nelson",
+      "email_address": "fant@shley.email",
+      "maximum_people_with_bikes": 5,
+      "maximum_people_without_bikes": 5,
+      "maximum_bikes_with_people": 0,
+      "maximum_bikes_without_people": 0,
+      "can_drive_thursday_night": true,
+      "can_drive_friday_morning": true,
+      "biking_back_saturday": false,
+      "going_home_friday": false,
+      "coordinates": [
+        36.169090,
+        -115.140580
+      ]
+    }
+  ]
+}
