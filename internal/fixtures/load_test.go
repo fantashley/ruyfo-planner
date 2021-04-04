@@ -21,19 +21,14 @@ var testFixture = Fixtures{
 			CanDriveFridayMorning:     true,
 			BikingBackSaturday:        false,
 			GoingHomeFriday:           false,
-			Coordinates: []float64{
-				36.169090,
-				-115.140580,
-			},
+			Latitude:                  36.169090,
+			Longitude:                 -115.140580,
 		},
 	},
 }
 
 func TestGetAll(t *testing.T) {
-	fixture, err := GetAll()
-	if err != nil {
-		t.Fatalf("Error getting all fixtures: %v", err)
-	}
+	fixture := GetAll(t, "")
 
 	if diff := cmp.Diff(fixture.Persons[0], testFixture.Persons[0]); diff != "" {
 		t.Errorf("Difference between expected and retrieved fixtures: %v", diff)
@@ -47,12 +42,9 @@ func TestGetAll(t *testing.T) {
 }
 
 func TestGetFile(t *testing.T) {
-	const personsFile = "persons.json"
+	const personsFile = "testdata/persons.json"
 
-	fixture, err := GetFile(personsFile)
-	if err != nil {
-		t.Fatalf("Error getting %q: %v", personsFile, err)
-	}
+	fixture := GetFile(t, personsFile)
 
 	if diff := cmp.Diff(fixture.Persons[0], testFixture.Persons[0]); diff != "" {
 		t.Errorf("Difference between expected and retrieved fixtures: %v", diff)

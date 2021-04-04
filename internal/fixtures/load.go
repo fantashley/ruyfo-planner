@@ -2,9 +2,9 @@ package fixtures
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"testing"
 
 	"github.com/fantashley/ruyfo-planner/pkg/entity"
 )
@@ -14,53 +14,54 @@ type Fixtures struct {
 }
 
 const (
-	DataDir      = "./data"
-	DataFileGlob = "*.json"
+	DefaultDataDir = "./testdata"
+	DataFileGlob   = "*.json"
 )
 
-func GetAll() (Fixtures, error) {
+func GetAll(t *testing.T, datadir string) Fixtures {
 	allFixtures := Fixtures{}
 
-	absPath, err := filepath.Abs(filepath.Join(DataDir, DataFileGlob))
+	actualDir := DefaultDataDir
+	if datadir != "" {
+		actualDir = datadir
+	}
+
+	absPath, err := filepath.Abs(filepath.Join(actualDir, DataFileGlob))
 	if err != nil {
-		return allFixtures, fmt.Errorf("failed to get absolute file path: %w", err)
+		t.Fatalf("failed to get absolute file path: %v", err)
 	}
 
 	files, err := filepath.Glob(absPath)
 	if err != nil {
-		return allFixtures, fmt.Errorf("failed to get files matching glob %q: %w", absPath, err)
+		t.Fatalf("failed to get files matching glob %q: %v", absPath, err)
 	}
 
 	for _, file := range files {
-		newFixture, err := GetFile(filepath.Base(file))
-		if err != nil {
-			return allFixtures, fmt.Errorf("failed to load fixture in file %q: %w", file, err)
-		}
-
+		newFixture := GetFile(t, file)
 		allFixtures = allFixtures.Combine(newFixture)
 	}
 
-	return allFixtures, nil
+	return allFixtures
 }
 
-func GetFile(filename string) (Fixtures, error) {
+func GetFile(t *testing.T, filename string) Fixtures {
 	var fixtures Fixtures
 
-	fullPath, err := filepath.Abs(filepath.Join(DataDir, filename))
+	fullPath, err := filepath.Abs(filename)
 	if err != nil {
-		return fixtures, fmt.Errorf("failed to get absolute file path: %w", err)
+		t.Fatalf("failed to get absolute file path: %v", err)
 	}
 
 	contents, err := ioutil.ReadFile(fullPath)
 	if err != nil {
-		return fixtures, fmt.Errorf("failed to read file %q: %w", fullPath, err)
+		t.Fatalf("failed to read file %q: %v", fullPath, err)
 	}
 
 	if err = json.Unmarshal(contents, &fixtures); err != nil {
-		return fixtures, fmt.Errorf("failed to unmarshal fixtures file %q: %w", fullPath, err)
+		t.Fatalf("failed to unmarshal fixtures file %q: %v", fullPath, err)
 	}
 
-	return fixtures, nil
+	return fixtures
 }
 
 func (f Fixtures) Combine(newFixture Fixtures) Fixtures {

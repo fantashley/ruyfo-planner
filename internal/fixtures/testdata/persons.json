@@ -12,10 +12,8 @@
       "can_drive_friday_morning": true,
       "biking_back_saturday": false,
       "going_home_friday": false,
-      "coordinates": [
-        36.169090,
-        -115.140580
-      ]
+      "latitude": 36.169090,
+      "longitude": -115.140580
     },
     {
       "first_name": "Matt",
@@ -29,10 +27,8 @@
       "can_drive_friday_morning": true,
       "biking_back_saturday": false,
       "going_home_friday": false,
-      "coordinates": [
-        40.023858,
-        -90.824512
-      ]
+      "latitude": 40.023858,
+      "longitude": -90.824512
     },
     {
       "first_name": "Stephen",
@@ -46,10 +42,8 @@
       "can_drive_friday_morning": true,
       "biking_back_saturday": false,
       "going_home_friday": false,
-      "coordinates": [
-        45.153892,
-        -92.891152
-      ]
+      "latitude": 45.153892,
+      "longitude": -92.891152
     }
   ]
 }
