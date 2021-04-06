@@ -7,6 +7,7 @@ CREATE TABLE persons (
   maximum_people_without_bikes int NOT NULL DEFAULT 0,
   maximum_bikes_with_people int NOT NULL DEFAULT 0,
   maximum_bikes_without_people int NOT NULL DEFAULT 0,
+  num_bikes int NOT NULL DEFAULT 0,
   can_drive_thursday_night boolean NOT NULL DEFAULT 0,
   can_drive_friday_morning boolean NOT NULL DEFAULT 0,
   biking_back_saturday boolean NOT NULL DEFAULT 0,

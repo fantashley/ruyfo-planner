@@ -17,13 +17,14 @@ func (db Database) CreatePerson(ctx context.Context, person entity.Person) error
 		maximum_people_without_bikes,
 		maximum_bikes_with_people,
 		maximum_bikes_without_people,
+		num_bikes,
 		can_drive_thursday_night,
 		can_drive_friday_morning,
 		biking_back_saturday,
 		going_home_friday,
 		latitude,
 		longitude
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if _, err := db.ExecContext(
@@ -36,6 +37,7 @@ func (db Database) CreatePerson(ctx context.Context, person entity.Person) error
 		person.MaximumPeopleWithoutBikes,
 		person.MaximumBikesWithPeople,
 		person.MaximumBikesWithoutPeople,
+		person.NumBikes,
 		person.CanDriveThursdayNight,
 		person.CanDriveFridayMorning,
 		person.BikingBackSaturday,

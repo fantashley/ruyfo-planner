@@ -9,6 +9,7 @@ type Person struct {
 	MaximumPeopleWithoutBikes int     `json:"maximum_people_without_bikes" db:"maximum_people_without_bikes"`
 	MaximumBikesWithPeople    int     `json:"maximum_bikes_with_people" db:"maximum_bikes_with_people"`
 	MaximumBikesWithoutPeople int     `json:"maximum_bikes_without_people" db:"maximum_bikes_without_people"`
+	NumBikes                  int     `json:"num_bikes" db:"num_bikes"`
 	CanDriveThursdayNight     bool    `json:"can_drive_thursday_night" db:"can_drive_thursday_night"`
 	CanDriveFridayMorning     bool    `json:"can_drive_friday_morning" db:"can_drive_friday_morning"`
 	BikingBackSaturday        bool    `json:"biking_back_saturday" db:"biking_back_saturday"`
