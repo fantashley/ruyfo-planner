@@ -11,6 +11,6 @@ CREATE TABLE persons (
   can_drive_friday_morning boolean NOT NULL DEFAULT 0,
   biking_back_saturday boolean NOT NULL DEFAULT 0,
   going_home_friday boolean NOT NULL DEFAULT 0,
-  latitude float NOT NULL DEFAULT 0.0,
-  longitude float NOT NULL DEFAULT 0.0
+  latitude decimal(9,6) NOT NULL DEFAULT 0.0,
+  longitude decimal(9,6) NOT NULL DEFAULT 0.0
 )
