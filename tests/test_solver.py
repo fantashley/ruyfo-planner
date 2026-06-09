@@ -112,6 +112,32 @@ def test_sag_wagon_carries_a_non_finisher():
     _no_unwilling_outcomes(problem, sol)
 
 
+def test_bike_handoff_labelled_when_bike_rides_in_another_car():
+    # Ann has no car and rides to the start with Cyd (whose car has no bike
+    # rack), so her bike must travel in Bob's car instead. That separation
+    # should surface as an explicit night-before hand-off instruction.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55060", has_car=False,
+        return_prefs=only(BIKEBACK),
+    )
+    bob = Person(
+        id="bob", name="Bob", home_zip="55060", has_car=True,
+        car_combos=[CarCombo(people=1, bikes=3)], can_drive_morning=True,
+        return_prefs=only(BIKEBACK),
+    )
+    cyd = Person(
+        id="cyd", name="Cyd", home_zip="55060", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=0)], can_drive_morning=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, bob, cyd])
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    ann_steps = " ".join(sol.itineraries["ann"])
+    assert "Bike hand-off" in ann_steps and "Bob" in ann_steps
+    # and the carrier is told they're bringing it
+    assert any("Bike hand-off" in s and "Ann" in s for s in sol.itineraries["bob"])
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

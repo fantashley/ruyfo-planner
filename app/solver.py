@@ -669,4 +669,52 @@ def _extract(problem, mb, solver, status) -> Solution:
                         f"{_loc_name(problem, o, a)} → {_loc_name(problem, o, b)} "
                         f"(driver{who}; {bikes} bike{'s' if bikes != 1 else ''})"
                     )
+
+    # Bike hand-offs (presentation only): when a bike rides in someone else's
+    # car and its owner isn't in that car, surface it as an explicit drop/collect
+    # — e.g. "drop your bike at Bob's the night before, he brings it to the start".
+    seen_out, seen_back = set(), set()
+    prepend = {p.id: [] for p in problem.people}
+    append = {p.id: [] for p in problem.people}
+    for o in mb.owners:
+        for k in range(NK):
+            for (a, b) in ALLOWED_ARCS[k]:
+                for ob in problem.people:
+                    key = (ob.id, o.id, k, a, b)
+                    if ob.id == o.id or key not in mb.bincar:
+                        continue
+                    if solver.Value(mb.bincar[key]) <= 0:
+                        continue
+                    owner_along = (ob.id, o.id, k, a, b) in mb.incar and solver.Value(
+                        mb.incar[ob.id, o.id, k, a, b]
+                    )
+                    if owner_along:
+                        continue  # bike travels with its owner — nothing to hand off
+                    if b == S and (ob.id, o.id) not in seen_out:
+                        seen_out.add((ob.id, o.id))
+                        prepend[ob.id].append(
+                            f"Bike hand-off: get your bike to {o.name} before ride day "
+                            f"— drop it at their place the night before (or they pick it "
+                            f"up); they bring it to {route.start_name}."
+                        )
+                        prepend[o.id].append(
+                            f"Bike hand-off: you're bringing {ob.name}'s bike to "
+                            f"{route.start_name} (they drop it off the night before, or "
+                            f"you pick it up)."
+                        )
+                    elif b == H and (ob.id, o.id) not in seen_back:
+                        seen_back.add((ob.id, o.id))
+                        append[ob.id].append(
+                            f"Bike hand-off: {o.name} brings your bike back near your "
+                            f"home afterward — arrange to collect it."
+                        )
+                        append[o.id].append(
+                            f"Bike hand-off: dropping {ob.name}'s bike back near their home."
+                        )
+    for p in problem.people:
+        if prepend[p.id] or append[p.id]:
+            base = sol.itineraries[p.id]
+            if base == ["Stay home — no travel needed."]:
+                base = []
+            sol.itineraries[p.id] = prepend[p.id] + base + append[p.id]
     return sol

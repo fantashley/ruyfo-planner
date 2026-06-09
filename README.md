@@ -26,6 +26,8 @@ handles:
 
 - night-before **car drops** at the finish + the ride home for the dropper,
 - night-before **bike drops** at the start,
+- **bike hand-offs** — when your bike rides in someone else's car, the plan tells
+  you to drop it at their place the night before (or have them pick it up),
 - any number of **morning car runs** to the start,
 - a car driven to the start being **retrieved** by biking back *or* being driven
   back (that night or the next day),
