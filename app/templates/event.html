@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name }} — RUYFO{% endblock %}
+{% block content %}
+<p><a href="/">← All events</a></p>
+<h1>{{ event.name }}</h1>
+<p class="muted">
+  {{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}
+  ({{ "%.0f"|format(route.distance_miles) }} mi){% if event.has_sag %} · SAG wagon available{% endif %}
+</p>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<div class="cols">
+  <section class="card">
+    <h2>Participants ({{ people|length }})</h2>
+    {% if people %}
+    <table class="roster">
+      <thead><tr><th>Name</th><th>ZIP</th><th>Role</th><th>Car</th><th></th></tr></thead>
+      <tbody>
+      {% for p in people %}
+        <tr>
+          <td>{{ p.name }}{% if p.household %}<br><span class="muted">{{ p.household }}</span>{% endif %}</td>
+          <td>{{ p.home_zip }}</td>
+          <td>
+            {% if p.is_rider %}rider{% else %}supporter{% endif %}
+            {% if p.is_sag_driver %} · SAG{% endif %}
+          </td>
+          <td>{% if p.has_car %}✓ {{ p.car_combos or "5x2" }}{% else %}—{% endif %}</td>
+          <td>
+            <form method="post" action="/events/{{ event.id }}/participants/{{ p.id }}/delete">
+              <button class="link danger" type="submit">remove</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No participants yet.</p>
+    {% endif %}
+
+    <p><a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a></p>
+  </section>
+
+  <section class="card">
+    <h2>Add a participant</h2>
+    <form method="post" action="/events/{{ event.id }}/participants">
+      <div class="grid2">
+        <label>Name <input name="name" required></label>
+        <label>Email <input name="email" type="email"></label>
+        <label>Home ZIP <input name="home_zip" pattern="[0-9]{5}" required></label>
+        <label>Household
+          <input name="household" placeholder="(optional, share with family)">
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Riding</legend>
+        <label class="check"><input type="checkbox" name="is_rider" checked> I'm riding the route</label>
+        <label>Bikes to transport <input name="num_bikes" type="number" min="0" value="1"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Car</legend>
+        <label class="check"><input type="checkbox" name="has_car"> I have a car to use</label>
+        <label>Capacity combos
+          <input name="car_combos" placeholder="5x2, 2x4">
+          <small class="muted">people × bikes, comma-separated. Blank = 5×2.</small>
+        </label>
+        <label class="check"><input type="checkbox" name="can_drive_morning">
+          Can drive people to the start the morning of</label>
+        <label class="check"><input type="checkbox" name="willing_drop_car">
+          Willing to drop my car at the finish the night before</label>
+        <label class="check"><input type="checkbox" name="willing_drive_dropper_home">
+          Willing to drive a car-dropper home the night before</label>
+        <label class="check"><input type="checkbox" name="willing_drop_bikes_at_start">
+          Willing to shuttle bikes to the start the night before</label>
+        {% if event.has_sag %}
+        <label class="check"><input type="checkbox" name="is_sag_driver">
+          I'll drive the SAG wagon</label>
+        {% endif %}
+      </fieldset>
+
+      <fieldset>
+        <legend>Getting home — mark each option</legend>
+        {% set opts = [("pref_tonight", "Drive/ride home the night of"),
+                       ("pref_bikeback", "Hotel, then bike back next morning"),
+                       ("pref_ridehome", "Hotel, then ride home next morning")] %}
+        {% for field, label in opts %}
+        <div class="pref-row">
+          <span>{{ label }}</span>
+          <select name="{{ field }}">
+            <option value="preferred"{% if field == "pref_tonight" %} selected{% endif %}>preferred</option>
+            <option value="acceptable"{% if field != "pref_tonight" %} selected{% endif %}>acceptable</option>
+            <option value="unwilling">unwilling</option>
+          </select>
+        </div>
+        {% endfor %}
+      </fieldset>
+
+      <button type="submit">Add participant</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

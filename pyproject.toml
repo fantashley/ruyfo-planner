@@ -1,0 +1,21 @@
+[project]
+name = "ruyfo-planner"
+version = "0.1.0"
+description = "Logistics planner for the RUYFO point-to-point bike event"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlmodel",
+    "ortools>=9.10",
+    "jinja2",
+    "python-multipart",
+    "zipcodes",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

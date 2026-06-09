@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Events</h1>
+
+{% if events %}
+<ul class="event-list">
+  {% for e in events %}
+  <li>
+    <a href="/events/{{ e.id }}">{{ e.name }}</a>
+    <span class="muted">— {{ ROUTES[e.route_key].name }}{% if e.has_sag %} · SAG wagon{% endif %}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No events yet. Create one below.</p>
+{% endif %}
+
+<section class="card">
+  <h2>New event</h2>
+  <form method="post" action="/events">
+    <label>Name
+      <input name="name" placeholder="e.g. Fall RUYFO 2026" required>
+    </label>
+    <label>Route
+      <select name="route_key">
+        {% for key, r in ROUTES.items() %}
+        <option value="{{ key }}">{{ r.name }} ({{ "%.0f"|format(r.distance_miles) }} mi)</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check">
+      <input type="checkbox" name="has_sag"> A SAG wagon is available for this event
+    </label>
+    <button type="submit">Create event</button>
+  </form>
+</section>
+{% endblock %}

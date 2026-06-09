@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Plan — {{ event.name }}{% endblock %}
+{% block content %}
+<p><a href="/events/{{ event.id }}">← Back to {{ event.name }}</a></p>
+<h1>Logistics plan</h1>
+<p class="muted">{{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}</p>
+
+{% if empty %}
+  <p class="error">Add some participants first.</p>
+{% elif solution.status == "infeasible" %}
+  <div class="card error-card">
+    <h2>No workable plan</h2>
+    <p>{{ solution.message }}</p>
+  </div>
+{% else %}
+  <div class="summary">
+    <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>total drive miles</span></div>
+    <div class="stat"><b>{{ solution.pref_deviations }}</b><span>on a backup return option</span></div>
+    <div class="stat"><b>{{ solution.status }}</b><span>solution</span></div>
+  </div>
+
+  <h2>Everyone's itinerary</h2>
+  <div class="itineraries">
+    {% for p in people %}
+    <div class="card person">
+      <h3>{{ p.name }}
+        <span class="muted">{{ p.home_zip }} · {% if p.is_rider %}rider{% else %}supporter{% endif %}</span>
+      </h3>
+      {% set sid = p.id|string %}
+      {% if sid in solution.return_outcome %}
+        <p class="badge">Return: {{ RETURN_LABELS[solution.return_outcome[sid]] }}</p>
+      {% endif %}
+      <ol>
+        {% for step in solution.itineraries[sid] %}
+          <li>{{ step }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h2>Car movements</h2>
+  <ul class="car-moves">
+    {% for move in solution.car_moves %}
+      <li>{{ move }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}
