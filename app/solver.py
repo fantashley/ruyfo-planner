@@ -289,6 +289,10 @@ class _Model:
                 m.Add(sum(self.pat[p.id, t, l] for l in LOCS) == 1)
             m.Add(self.pat[p.id, 0, H] == 1)
             m.Add(self.pat[p.id, NK, H] == 1)
+            # everyone sleeps at home the night before — any night-before drop must
+            # be a round trip home (droppers get a ride back). Cars/bikes left at
+            # the start or finish still stay put; this only pins people.
+            m.Add(self.pat[p.id, T_MORNING, H] == 1)
             if p.is_rider:
                 m.Add(self.pat[p.id, T_RIDE, S] == 1)  # at start for the ride
                 m.Add(self.pat[p.id, T_RIDE + 1, F] == 1)  # at finish after the ride

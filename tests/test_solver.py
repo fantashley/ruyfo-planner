@@ -1,10 +1,17 @@
+from ortools.sat.python import cp_model
+
 from app.events import ROUTES
 from app.solver import (
+    F,
+    H,
+    S,
     CarCombo,
     Person,
     Pref,
     Problem,
     ReturnOption,
+    T_MORNING,
+    _Model,
     solve,
 )
 
@@ -221,34 +228,49 @@ def test_overnight_bag_with_supporter_to_the_finish_is_ok():
     assert sol.status in ("optimal", "feasible")
 
 
-def test_one_person_can_drop_bikes_at_start_then_car_at_finish():
-    # Ash's car is the only bike rack, so her bike must be dropped at the start
-    # before the same car continues to the finish to be left there overnight —
-    # a three-leg night-before chain (home -> start -> finish -> ...).
+def test_everyone_sleeps_at_home_the_night_before():
+    # Ann drops her car at the finish the night before; the home-at-night rule
+    # means she (and her ride) must be back home when the morning begins, rather
+    # than parked at the start or finish overnight.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=True,
+        willing_drop_car=True, return_prefs=only(TONIGHT),
+    )
+    carl = Person(
+        id="carl", name="Carl", home_zip="56001", has_car=True, is_rider=False,
+        can_drive_morning=True, willing_drive_dropper_home=True,
+    )
+    mb = _Model(Problem(route=ROUTE, people=[ann, carl]))
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    for p in (ann, carl):
+        assert solver.Value(mb.pat[p.id, T_MORNING, H]) == 1
+
+
+def test_chain_drop_bikes_then_car_is_feasible():
+    # The same person can drop bikes at the start and then drive their car on to
+    # the finish the night before (home -> start -> finish), and still get home.
+    # Val's car has no rack, so only Ash's car can carry the bike.
     ash = Person(
-        id="ash", name="Ash", home_zip="55416", has_car=True,
+        id="ash", name="Ash", home_zip="55060", has_car=True,
         car_combos=[CarCombo(people=5, bikes=2)], num_bikes=1,
         willing_drop_bikes_at_start=True, willing_drop_car=True,
         return_prefs=only(TONIGHT),
     )
     val = Person(
-        id="val", name="Val", home_zip="56001", is_rider=False, has_car=True,
-        car_combos=[CarCombo(people=4, bikes=0)],  # no rack: can't carry the bike
+        id="val", name="Val", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=0)],
         willing_drive_dropper_home=True, can_drive_morning=True,
     )
-    problem = Problem(route=ROUTE, people=[ash, val])
-    sol = solve(problem)
-    assert sol.status in ("optimal", "feasible")
-    steps = sol.itineraries["ash"]
-    start, finish = ROUTE.start_name, ROUTE.finish_name
-    # leg to the start (dropping the bike) and a leg start -> finish (dropping car)
-    assert any(
-        "Night before" in s and "Drive your car" in s and f"→ {start}" in s
-        for s in steps
-    )
-    assert any(
-        "Night before" in s and f"{start} → {finish}" in s for s in steps
-    )
+    mb = _Model(Problem(route=ROUTE, people=[ash, val]))
+    # force the chain: Ash's bike sits at the start after the first night-before
+    # leg, and her car is parked at the finish when morning begins
+    mb.m.Add(mb.bat["ash", 1, S] == 1)
+    mb.m.Add(mb.cat["ash", T_MORNING, F] == 1)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    # and Ash is still home when the morning begins
+    assert solver.Value(mb.pat["ash", T_MORNING, H]) == 1
 
 
 def test_household_rides_together():

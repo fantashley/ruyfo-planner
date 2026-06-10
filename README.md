@@ -24,7 +24,10 @@ before, morning, the ride, evening, next morning) and solves it to optimality
 with [OR-Tools CP-SAT](https://developers.google.com/optimization/cp). It
 handles:
 
-- night-before **car drops** at the finish + the ride home for the dropper,
+- night-before **car drops** at the finish + the ride home for the dropper
+  (everyone sleeps at home the night before — nobody is left at the start/finish),
+- the night before is a **three-leg chain**, so one person can drop bikes at the
+  start *and* drive their car on to the finish before heading home,
 - night-before **bike drops** at the start,
 - **bike hand-offs** — when your bike rides in someone else's car, the plan tells
   you to drop it at their place the night before (or have them pick it up),
