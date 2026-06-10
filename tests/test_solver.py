@@ -221,6 +221,36 @@ def test_overnight_bag_with_supporter_to_the_finish_is_ok():
     assert sol.status in ("optimal", "feasible")
 
 
+def test_one_person_can_drop_bikes_at_start_then_car_at_finish():
+    # Ash's car is the only bike rack, so her bike must be dropped at the start
+    # before the same car continues to the finish to be left there overnight —
+    # a three-leg night-before chain (home -> start -> finish -> ...).
+    ash = Person(
+        id="ash", name="Ash", home_zip="55416", has_car=True,
+        car_combos=[CarCombo(people=5, bikes=2)], num_bikes=1,
+        willing_drop_bikes_at_start=True, willing_drop_car=True,
+        return_prefs=only(TONIGHT),
+    )
+    val = Person(
+        id="val", name="Val", home_zip="56001", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=0)],  # no rack: can't carry the bike
+        willing_drive_dropper_home=True, can_drive_morning=True,
+    )
+    problem = Problem(route=ROUTE, people=[ash, val])
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    steps = sol.itineraries["ash"]
+    start, finish = ROUTE.start_name, ROUTE.finish_name
+    # leg to the start (dropping the bike) and a leg start -> finish (dropping car)
+    assert any(
+        "Night before" in s and "Drive your car" in s and f"→ {start}" in s
+        for s in steps
+    )
+    assert any(
+        "Night before" in s and f"{start} → {finish}" in s for s in steps
+    )
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

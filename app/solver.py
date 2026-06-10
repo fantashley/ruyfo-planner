@@ -118,15 +118,21 @@ class Problem:
 # Time structure
 # --------------------------------------------------------------------------- #
 
-# 8 transitions connect 9 time points (t0..t8).
-NK = 8
-T_RIDE = 3  # transition index of the ride (t3 -> t4): start -> finish
-T_BIKEBACK = 6  # next-morning bike-back transition (finish -> start)
-T_HOME_TONIGHT = 6  # being home at time point 6 == "made it home tonight"
+# 9 transitions connect 10 time points (t0..t9). The night before is THREE legs
+# so one person can chain, e.g., drop bikes at the start -> drive their car to the
+# finish -> get a ride home.
+NK = 9
+NIGHT_BEFORE = (0, 1, 2)  # the three night-before legs
+T_MORNING = 3  # morning car-run transition (t3 -> t4). A car left at the finish
+#                overnight is parked there at time point T_MORNING.
+T_RIDE = 4  # the ride (t4 -> t5): start -> finish
+T_BIKEBACK = 7  # next-morning bike-back transition (finish -> start)
+T_HOME_TONIGHT = 7  # being home at time point 7 == "made it home tonight"
 
 TRANSITION_LABELS = [
     "Night before — drive out",
-    "Night before — return home",
+    "Night before — continue",
+    "Night before — continue",
     "Morning of the ride",
     "The ride",
     "Evening — after the ride",
@@ -135,20 +141,12 @@ TRANSITION_LABELS = [
     "Next morning — continued",
 ]
 
-# Which directed arcs are even worth creating at each transition (pruning that
-# never traps a resource). k0/k1 are the night-before round trip; the rest are
-# left general so nobody gets stuck.
+# Which directed arcs are worth creating at each transition. At t0 everyone and
+# everything is home, so the first leg can only head out; every later leg is left
+# general so a resource never gets trapped.
 _ALL_ARCS = [(a, b) for a in LOCS for b in LOCS if a != b]
-ALLOWED_ARCS: dict[int, list[tuple[str, str]]] = {
-    0: [(H, F), (H, S)],
-    1: [(F, H), (S, H), (F, S), (S, F)],
-    2: _ALL_ARCS,
-    3: _ALL_ARCS,
-    4: _ALL_ARCS,
-    5: _ALL_ARCS,
-    6: _ALL_ARCS,
-    7: _ALL_ARCS,
-}
+ALLOWED_ARCS: dict[int, list[tuple[str, str]]] = {k: list(_ALL_ARCS) for k in range(NK)}
+ALLOWED_ARCS[0] = [(H, F), (H, S)]
 
 
 # --------------------------------------------------------------------------- #
@@ -396,30 +394,33 @@ class _Model:
     def _apply_gates(self):
         m = self.m
         for o in self.owners:
-            # leaving a car at the finish overnight requires willingness to drop
+            # leaving a car at the finish overnight (parked there when morning
+            # begins) requires willingness to drop it
             if not o.willing_drop_car:
-                m.Add(self.cat[o.id, 2, F] == 0)
-            # night-before bike shuttle to the start
-            if not o.willing_drop_bikes_at_start and (o.id, 0, H, S) in self.cmove:
-                m.Add(self.cmove[o.id, 0, H, S] == 0)
-            # night-before: carrying *droppers* home. The willingness flag only
-            # governs giving rides to people outside your own household — family
-            # sharing the car always travels together.
+                m.Add(self.cat[o.id, T_MORNING, F] == 0)
+            # night-before bike shuttle to the start — any night-before H->S leg
+            if not o.willing_drop_bikes_at_start:
+                for k in NIGHT_BEFORE:
+                    if (o.id, k, H, S) in self.cmove:
+                        m.Add(self.cmove[o.id, k, H, S] == 0)
+            # night-before: carrying *droppers* home (any F->H night-before leg).
+            # The willingness flag only governs giving rides to people outside your
+            # own household — family sharing the car always travels together.
             if not o.willing_drive_dropper_home:
                 for p in self.people:
-                    if (
-                        p.household != o.household
-                        and (p.id, o.id, 1, F, H) in self.incar
-                    ):
-                        m.Add(self.incar[p.id, o.id, 1, F, H] == 0)
+                    if p.household == o.household:
+                        continue
+                    for k in NIGHT_BEFORE:
+                        if (p.id, o.id, k, F, H) in self.incar:
+                            m.Add(self.incar[p.id, o.id, k, F, H] == 0)
             # morning: carrying *others* to the start (household members exempt)
             if not o.can_drive_morning:
                 for p in self.people:
                     if (
                         p.household != o.household
-                        and (p.id, o.id, 2, H, S) in self.incar
+                        and (p.id, o.id, T_MORNING, H, S) in self.incar
                     ):
-                        m.Add(self.incar[p.id, o.id, 2, H, S] == 0)
+                        m.Add(self.incar[p.id, o.id, T_MORNING, H, S] == 0)
 
     def _build_bikes(self):
         m = self.m
