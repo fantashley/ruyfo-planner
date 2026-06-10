@@ -55,9 +55,24 @@
       </div>
 
       <fieldset>
-        <legend>Riding</legend>
+        <legend>Riding &amp; gear</legend>
         <label class="check"><input type="checkbox" name="is_rider" checked> I'm riding the route</label>
-        <label>Bikes to transport <input name="num_bikes" type="number" min="0" value="1"></label>
+        <label>Bikes I own &amp; bring
+          <input name="num_bikes" type="number" min="0" value="1">
+          <small class="muted">Set 0 if you'll only ride a borrowed loaner.</small>
+        </label>
+        <label>I'm bringing a spare/loaner bike for
+          <select name="loaner_for">
+            <option value="">— nobody —</option>
+            {% for q in people %}
+            <option value="{{ q.id }}">{{ q.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">Add the borrower first, then pick them here.</small>
+        </label>
+        <label>Overnight bags to get to the hotel
+          <input name="bag_count" type="number" min="0" value="0">
+        </label>
       </fieldset>
 
       <fieldset>

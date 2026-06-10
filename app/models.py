@@ -27,6 +27,8 @@ class Participant(SQLModel, table=True):
 
     is_rider: bool = True
     num_bikes: int = 1
+    loaner_for: str = ""  # participant id this person brings a spare bike for
+    bag_count: int = 0  # overnight bags to get to the hotel
 
     has_car: bool = False
     car_combos: str = ""  # e.g. "5x2, 2x4" => 5 people/2 bikes OR 2 people/4 bikes
@@ -72,6 +74,8 @@ def to_person(p: Participant) -> Person:
         household=p.household or str(p.id),
         is_rider=p.is_rider,
         num_bikes=p.num_bikes,
+        loaner_for=p.loaner_for,
+        bag_count=p.bag_count,
         has_car=p.has_car,
         car_combos=parse_combos(p.car_combos) if p.has_car else [],
         willing_drop_car=p.willing_drop_car,

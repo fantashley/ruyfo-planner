@@ -138,6 +138,89 @@ def test_bike_handoff_labelled_when_bike_rides_in_another_car():
     assert any("Bike hand-off" in s and "Ann" in s for s in sol.itineraries["bob"])
 
 
+HOTEL_ONLY = {
+    TONIGHT: Pref.UNWILLING,
+    BIKEBACK: Pref.PREFERRED,
+    RIDEHOME: Pref.ACCEPTABLE,
+}
+
+
+def test_loaner_bike_lets_a_bikeless_rider_ride():
+    # Bo owns no bike; Alex brings a spare for Bo. Bo should ride Alex's loaner,
+    # and the plan should say so in both itineraries.
+    alex = Person(
+        id="alex", name="Alex", home_zip="55021", has_car=True,
+        can_drive_morning=True, num_bikes=1, loaner_for="bo",
+        return_prefs=only(BIKEBACK),
+    )
+    bo = Person(
+        id="bo", name="Bo", home_zip="55021", has_car=False, num_bikes=0,
+        return_prefs=only(BIKEBACK),
+    )
+    problem = Problem(route=ROUTE, people=[alex, bo])
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    bo_steps = " ".join(sol.itineraries["bo"]).lower()
+    assert "loaner" in bo_steps and "alex" in bo_steps
+    assert any("spare bike for Bo" in s for s in sol.itineraries["alex"])
+
+
+def test_bikeless_rider_without_loaner_or_sag_is_infeasible():
+    # A rider with no bike, no loaner, and no SAG has nothing to ride.
+    solo = Person(
+        id="solo", name="Solo", home_zip="55021", has_car=True, num_bikes=0,
+        return_prefs=only(BIKEBACK),
+    )
+    sol = solve(Problem(route=ROUTE, people=[solo]))
+    assert sol.status == "infeasible"
+    assert "bike" in sol.message.lower()
+
+
+def test_overnight_bag_reaches_hotel_via_sag():
+    # Ann stays overnight with a bag; the SAG carries it to the hotel.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    sage = Person(
+        id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
+        can_drive_morning=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, sage], has_sag=True)
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    assert any("bag" in s.lower() and "sag" in s.lower()
+               for s in sol.itineraries["ann"])
+
+
+def test_overnight_bag_without_finish_bound_vehicle_is_infeasible():
+    # Ann stays overnight with a bag, but her only car goes to the start (she
+    # rides), there's no SAG and no car dropped at the finish — the bag is stuck.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=True, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    sol = solve(Problem(route=ROUTE, people=[ann]))
+    assert sol.status == "infeasible"
+    assert "bag" in sol.message.lower()
+
+
+def test_overnight_bag_with_supporter_to_the_finish_is_ok():
+    # A non-riding supporter can ferry the bag to the finish without a SAG.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    carl = Person(
+        id="carl", name="Carl", home_zip="55021", is_rider=False, has_car=True,
+        can_drive_morning=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, carl])
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

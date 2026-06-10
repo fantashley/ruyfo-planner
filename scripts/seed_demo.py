@@ -37,22 +37,32 @@ def run() -> None:
             dict(name="Bob Lind", home_zip="55060", has_car=True, car_combos="5x2",
                  pref_tonight="preferred", pref_bikeback="unwilling",
                  pref_ridehome="acceptable"),
-            dict(name="Cyd Okafor", home_zip="55021",
+            # Cyd owns no bike — she'll ride Ann's loaner (wired up below)
+            dict(name="Cyd Okafor", home_zip="55021", num_bikes=0,
                  pref_tonight="acceptable", pref_bikeback="preferred",
                  pref_ridehome="acceptable"),
             dict(name="Deb Eklund", home_zip="56007", household="Eklund",
                  has_car=True, car_combos="4x4",
                  pref_tonight="acceptable", pref_bikeback="acceptable",
                  pref_ridehome="preferred"),
-            dict(name="Eli Eklund", home_zip="56007", household="Eklund",
-                 pref_tonight="acceptable", pref_bikeback="acceptable",
+            # Eli stays overnight and sends an overnight bag to the hotel
+            dict(name="Eli Eklund", home_zip="56007", household="Eklund", bag_count=1,
+                 pref_tonight="unwilling", pref_bikeback="acceptable",
                  pref_ridehome="preferred"),
             dict(name="Sage Moore", home_zip="55021", is_rider=False, num_bikes=0,
                  has_car=True, car_combos="8x8", is_sag_driver=True,
                  can_drive_morning=True, willing_drive_dropper_home=True),
         ]
-        for r in roster:
-            s.add(Participant(event_id=ev.id, **r))
+        rows = [Participant(event_id=ev.id, **r) for r in roster]
+        s.add_all(rows)
+        s.commit()
+        for row in rows:
+            s.refresh(row)
+        # wire the loaner: Ann brings a spare bike for Cyd
+        ann = next(r for r in rows if r.name.startswith("Ann"))
+        cyd = next(r for r in rows if r.name.startswith("Cyd"))
+        ann.loaner_for = str(cyd.id)
+        s.add(ann)
         s.commit()
         print(f"Seeded '{DEMO_EVENT}' (id={ev.id}) with {len(roster)} participants.")
 

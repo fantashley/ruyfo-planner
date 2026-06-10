@@ -65,7 +65,10 @@ class Person:
     home_zip: str
     household: str = ""  # blank => own household (id used)
     is_rider: bool = True
-    num_bikes: int = 1  # bikes this person needs transported (0 for a bike-less supporter)
+    num_bikes: int = 1  # bikes this person OWNS and brings (0 for a bike-less supporter
+    #                     or a rider who only borrows a loaner)
+    loaner_for: str = ""  # participant id this person brings a spare/loaner bike for
+    bag_count: int = 0  # overnight bags to get to the hotel (finish)
 
     # car
     has_car: bool = False
@@ -198,9 +201,38 @@ class _Model:
 
         self._build()
 
+    def _precompute_loaners(self):
+        """Resolve loaner pairings and per-owner bike accounting.
+
+        A loaner is declared on the lender (`loaner_for` = borrower id). Each
+        loaner is one extra bike owned by the lender that the borrower rides and
+        which returns to the lender's home.
+        """
+        self.loaners = []  # (lender_id, borrower_id)
+        for p in self.people:
+            if p.loaner_for and p.loaner_for in self.by_id:
+                self.loaners.append((p.id, p.loaner_for))
+
+        # total bikes each person brings = their own + loaners they provide
+        self.total_bikes = {p.id: p.num_bikes for p in self.people}
+        for lender_id, _ in self.loaners:
+            self.total_bikes[lender_id] += 1
+
+        # which owners' bikes a rider may pedal, and which riders pedal an owner's
+        self.bike_owners_for_rider = {}  # rider_id -> [owner_id, ...]
+        self.riders_of_owner_bike = {}  # owner_id -> [rider_id, ...]
+        for p in self.people:
+            if p.is_rider and p.num_bikes > 0:
+                self.bike_owners_for_rider.setdefault(p.id, []).append(p.id)
+                self.riders_of_owner_bike.setdefault(p.id, []).append(p.id)
+        for lender_id, borrower_id in self.loaners:
+            self.bike_owners_for_rider.setdefault(borrower_id, []).append(lender_id)
+            self.riders_of_owner_bike.setdefault(lender_id, []).append(borrower_id)
+
     # -- variable builders -------------------------------------------------- #
     def _build(self):
         m = self.m
+        self._precompute_loaners()
         self.cat = {}  # (owner, t, loc) -> bool : car at loc
         self.cmove = {}  # (owner, k, frm, to) -> bool
         self.cstay = {}  # (owner, k, loc) -> bool
@@ -267,14 +299,18 @@ class _Model:
                 for l in LOCS:
                     self.pstay[p.id, k, l] = m.NewBoolVar(f"pstay_{p.id}_{k}_{l}")
                 for (a, b) in ALLOWED_ARCS[k]:
-                    # bicycle moves: the ride (S->F) and a next-morning bike-back (F->S)
+                    # bicycle moves: the ride (S->F) and a next-morning bike-back
+                    # (F->S). A rider may pedal their own bike or a loaner, so the
+                    # key is (rider, owner-of-the-bike). A rider with no own bike
+                    # and no loaner gets no bicycle var -> can only cross via SAG.
                     if p.is_rider and (
                         (k == T_RIDE and (a, b) == (S, F))
                         or (k == T_BIKEBACK and (a, b) == (F, S))
                     ):
-                        self.bike_self[p.id, k, a, b] = m.NewBoolVar(
-                            f"bike_{p.id}_{k}_{a}{b}"
-                        )
+                        for owner_id in self.bike_owners_for_rider.get(p.id, ()):
+                            self.bike_self[p.id, owner_id, k, a, b] = m.NewBoolVar(
+                                f"bike_{p.id}_{owner_id}_{k}_{a}{b}"
+                            )
                     for o in self.owners:
                         if (o.id, k, a, b) not in self.cmove:
                             continue
@@ -349,8 +385,9 @@ class _Model:
                 continue
             if to is not None and b != to:
                 continue
-            if (pid, k, a, b) in self.bike_self:
-                out.append(self.bike_self[pid, k, a, b])
+            for owner_id in self.bike_owners_for_rider.get(pid, ()):
+                if (pid, owner_id, k, a, b) in self.bike_self:
+                    out.append(self.bike_self[pid, owner_id, k, a, b])
             for o in self.owners:
                 if (pid, o.id, k, a, b) in self.incar:
                     out.append(self.incar[pid, o.id, k, a, b])
@@ -386,22 +423,24 @@ class _Model:
 
     def _build_bikes(self):
         m = self.m
-        owners_with_bikes = [p for p in self.people if p.num_bikes > 0]
+        # a person "has bikes" if they own some or bring loaners
+        owners_with_bikes = [p for p in self.people if self.total_bikes[p.id] > 0]
         self.bat = {}  # (owner_pid, t, loc) -> int
         self.bstay = {}
         self.bincar = {}  # (owner_pid, car_owner, k, frm, to) -> int
 
         for ob in owners_with_bikes:
-            nb = ob.num_bikes
+            nb = self.total_bikes[ob.id]  # own bikes + loaners they bring
             for t in range(NK + 1):
                 for l in LOCS:
                     self.bat[ob.id, t, l] = m.NewIntVar(0, nb, f"bat_{ob.id}_{t}_{l}")
                 m.Add(sum(self.bat[ob.id, t, l] for l in LOCS) == nb)
             m.Add(self.bat[ob.id, 0, H] == nb)  # bikes start at home
             m.Add(self.bat[ob.id, NK, H] == nb)  # ... and end at home
-            if ob.is_rider:
-                m.Add(self.bat[ob.id, T_RIDE, S] == nb)  # all at start for the ride
-                m.Add(self.bat[ob.id, T_RIDE + 1, F] == nb)  # all at finish after
+            # every bike in play is ridden (by the owner or a declared borrower),
+            # so all of them are at the start for the ride and the finish after
+            m.Add(self.bat[ob.id, T_RIDE, S] == nb)
+            m.Add(self.bat[ob.id, T_RIDE + 1, F] == nb)
 
             for k in range(NK):
                 for l in LOCS:
@@ -436,11 +475,6 @@ class _Model:
                             for ci in range(len(o.car_combos))
                         )
                     )
-        # link a self-powered bicycle leg to carrying one of the rider's own bikes
-        for (pid, k, a, b), var in self.bike_self.items():
-            # represented in _bike_moved via this same var (coefficient 1)
-            pass
-
     def _bike_moved(self, ob_id, k, frm=None, to=None):
         terms = []
         for (a, b) in ALLOWED_ARCS[k]:
@@ -451,9 +485,70 @@ class _Model:
             for o in self.owners:
                 if (ob_id, o.id, k, a, b) in self.bincar:
                     terms.append(self.bincar[ob_id, o.id, k, a, b])
-            # the owner self-powering a bicycle carries one of their own bikes
-            if (ob_id, k, a, b) in self.bike_self:
-                terms.append(self.bike_self[ob_id, k, a, b])
+            # any rider pedalling one of this owner's bikes moves it (own or loaner)
+            for rider_id in self.riders_of_owner_bike.get(ob_id, ()):
+                if (rider_id, ob_id, k, a, b) in self.bike_self:
+                    terms.append(self.bike_self[rider_id, ob_id, k, a, b])
+        return terms
+
+    def _build_bags(self):
+        """Overnight bags: non-rideable items that ride only in cars/SAG.
+
+        A bag must reach the finish (hotel) by the evening *if* its owner stays
+        overnight, then return home. With a SAG the bag goes home->start in a
+        morning car then start->finish on the SAG; without one it needs a
+        finish-bound car (a night-before drop or a supporter driving to F).
+        """
+        m = self.m
+        bag_owners = [p for p in self.people if p.bag_count > 0]
+        self.gat = {}  # (owner_pid, t, loc) -> int : bags at loc
+        self.gstay = {}
+        self.gincar = {}  # (owner_pid, car_owner, k, frm, to) -> int
+
+        for ob in bag_owners:
+            nb = ob.bag_count
+            for t in range(NK + 1):
+                for l in LOCS:
+                    self.gat[ob.id, t, l] = m.NewIntVar(0, nb, f"gat_{ob.id}_{t}_{l}")
+                m.Add(sum(self.gat[ob.id, t, l] for l in LOCS) == nb)
+            m.Add(self.gat[ob.id, 0, H] == nb)  # bags start at home
+            m.Add(self.gat[ob.id, NK, H] == nb)  # ... and end at home
+            # at the finish (hotel) by the evening iff staying overnight
+            if ob.is_rider and ob.id in self.home_tonight:
+                stay = 1 - self.home_tonight[ob.id]  # 1 == hotel overnight
+                m.Add(self.gat[ob.id, T_RIDE + 1, F] >= nb * stay)
+
+            for k in range(NK):
+                for l in LOCS:
+                    self.gstay[ob.id, k, l] = m.NewIntVar(
+                        0, nb, f"gstay_{ob.id}_{k}_{l}"
+                    )
+                for (a, b) in ALLOWED_ARCS[k]:
+                    for o in self.owners:
+                        if (o.id, k, a, b) in self.cmove:
+                            g = m.NewIntVar(0, nb, f"ginc_{ob.id}_{o.id}_{k}_{a}{b}")
+                            self.gincar[ob.id, o.id, k, a, b] = g
+                            # bags ride only a car that actually makes the move;
+                            # they don't consume people/bike capacity (small)
+                            m.Add(g <= nb * self.cmove[o.id, k, a, b])
+                # bag flow conservation (cars only — bags are never pedalled)
+                for l in LOCS:
+                    out = [self.gstay[ob.id, k, l]] + self._bag_moved(ob.id, k, frm=l)
+                    m.Add(self.gat[ob.id, k, l] == sum(out))
+                for l in LOCS:
+                    inn = [self.gstay[ob.id, k, l]] + self._bag_moved(ob.id, k, to=l)
+                    m.Add(self.gat[ob.id, k + 1, l] == sum(inn))
+
+    def _bag_moved(self, ob_id, k, frm=None, to=None):
+        terms = []
+        for (a, b) in ALLOWED_ARCS[k]:
+            if frm is not None and a != frm:
+                continue
+            if to is not None and b != to:
+                continue
+            for o in self.owners:
+                if (ob_id, o.id, k, a, b) in self.gincar:
+                    terms.append(self.gincar[ob_id, o.id, k, a, b])
         return terms
 
     def _build_returns_and_objective(self):
@@ -467,10 +562,14 @@ class _Model:
         for p in riders:
             ht = self.pat[p.id, T_HOME_TONIGHT, H]
             self.home_tonight[p.id] = ht
-            bb = self.bike_self.get((p.id, T_BIKEBACK, F, S))
-            if bb is None:
-                bb = m.NewBoolVar(f"nobikeback_{p.id}")
-                m.Add(bb == 0)
+            # bike-back = pedalling *some* bike (own or loaner) back next morning
+            bb_terms = [
+                self.bike_self[p.id, owner_id, T_BIKEBACK, F, S]
+                for owner_id in self.bike_owners_for_rider.get(p.id, ())
+                if (p.id, owner_id, T_BIKEBACK, F, S) in self.bike_self
+            ]
+            bb = m.NewBoolVar(f"bikeback_{p.id}")
+            m.Add(bb == sum(bb_terms))  # person flow guarantees the sum is <= 1
             self.opt_bikeback[p.id] = bb
             m.Add(bb + ht <= 1)  # can't bike back if already home tonight
             rh = m.NewBoolVar(f"ridehome_{p.id}")
@@ -488,6 +587,9 @@ class _Model:
                     m.Add(var == 0)
                 elif pr == Pref.ACCEPTABLE:
                     pref_terms.append(var)
+
+        # overnight bags depend on home_tonight, so build them now
+        self._build_bags()
 
         # objective: driving distance (+ pickup detours) + preference penalty
         dist_terms = []
@@ -507,12 +609,16 @@ class _Model:
                                 * self.p.detour_factor
                                 * SCALE
                             )
-                            if det and (p.id, o.id, k, a, b) in self.incar:
+                            if not det:
+                                continue
+                            # same pickup detour for ferrying someone else's
+                            # passengers, bikes, or bags (otherwise they haul free)
+                            if (p.id, o.id, k, a, b) in self.incar:
                                 dist_terms.append(det * self.incar[p.id, o.id, k, a, b])
-                            # the same pickup detour applies to ferrying someone
-                            # else's bikes (otherwise bikes haul for free)
-                            if det and (p.id, o.id, k, a, b) in self.bincar:
+                            if (p.id, o.id, k, a, b) in self.bincar:
                                 dist_terms.append(det * self.bincar[p.id, o.id, k, a, b])
+                            if (p.id, o.id, k, a, b) in self.gincar:
+                                dist_terms.append(det * self.gincar[p.id, o.id, k, a, b])
 
         self.dist_total = m.NewIntVar(0, 10_000_000, "dist_total")
         m.Add(self.dist_total == sum(dist_terms))
@@ -570,6 +676,29 @@ def _diagnose_infeasible(problem: Problem) -> str:
         hints.append(
             f"{only_tonight[0].name} has marked every return option as unwilling"
         )
+    # a rider with no bike of their own and no loaner can only cross on the SAG
+    borrowers = {p.loaner_for for p in problem.people if p.loaner_for}
+    bikeless = [
+        p for p in riders if p.num_bikes <= 0 and p.id not in borrowers
+    ]
+    if bikeless and not problem.has_sag:
+        hints.append(
+            f"{bikeless[0].name} is riding but has no bike (own or loaner) and "
+            "there's no SAG wagon to carry them"
+        )
+    # a bag can only reach the hotel via the SAG or a finish-bound car
+    finish_reachable = (
+        problem.has_sag
+        or any(p.willing_drop_car for p in problem.people)
+        or any(p.has_car and not p.is_rider for p in problem.people)
+    )
+    baggers = [p for p in problem.people if p.bag_count > 0]
+    if baggers and not finish_reachable:
+        hints.append(
+            f"{baggers[0].name}'s overnight bag can't reach the hotel — there's no "
+            "SAG wagon, no car dropped at the finish, and no non-riding driver to "
+            "take it to the finish"
+        )
     base = "No workable plan was found."
     if hints:
         return base + " Likely cause: " + "; ".join(hints) + "."
@@ -612,12 +741,19 @@ def _extract(problem, mb, solver, status) -> Solution:
         steps = []
         for k in range(NK):
             for (a, b) in ALLOWED_ARCS[k]:
-                # self-powered bicycle?
-                bself = mb.bike_self.get((p.id, k, a, b))
-                if bself is not None and solver.Value(bself):
+                # self-powered bicycle? (own bike or a loaner)
+                for owner_id in mb.bike_owners_for_rider.get(p.id, ()):
+                    bself = mb.bike_self.get((p.id, owner_id, k, a, b))
+                    if bself is None or not solver.Value(bself):
+                        continue
                     verb = "Ride the route" if (a, b) == (S, F) else "Bike back"
+                    bike = (
+                        f" on {mb.by_id[owner_id].name}'s loaner bike"
+                        if owner_id != p.id
+                        else ""
+                    )
                     steps.append(
-                        f"{TRANSITION_LABELS[k]}: {verb} "
+                        f"{TRANSITION_LABELS[k]}: {verb}{bike} "
                         f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)})"
                     )
                 for o in mb.owners:
@@ -651,23 +787,28 @@ def _extract(problem, mb, solver, status) -> Solution:
                         and solver.Value(mb.incar[p.id, o.id, k, a, b])
                     ]
                     bikes = 0
+                    bags = 0
                     for ob in problem.people:
                         key = (ob.id, o.id, k, a, b)
                         if key in mb.bincar:
                             bikes += solver.Value(mb.bincar[key])
+                        if key in mb.gincar:
+                            bags += solver.Value(mb.gincar[key])
                     # hide only truly empty no-op moves (owner lives at the
                     # endpoint and is carrying nobody/nothing)
                     if (
                         _arc_distance(o.home_zip, route, a, b) < ZERO_MI
                         and not passengers
                         and bikes == 0
+                        and bags == 0
                     ):
                         continue
                     who = f" + {', '.join(passengers)}" if passengers else ""
+                    bagtxt = f"; {bags} bag{'s' if bags != 1 else ''}" if bags else ""
                     sol.car_moves.append(
                         f"{TRANSITION_LABELS[k]}: {o.name}'s car "
                         f"{_loc_name(problem, o, a)} → {_loc_name(problem, o, b)} "
-                        f"(driver{who}; {bikes} bike{'s' if bikes != 1 else ''})"
+                        f"(driver{who}; {bikes} bike{'s' if bikes != 1 else ''}{bagtxt})"
                     )
 
     # Bike hand-offs (presentation only): when a bike rides in someone else's
@@ -676,6 +817,43 @@ def _extract(problem, mb, solver, status) -> Solution:
     seen_out, seen_back = set(), set()
     prepend = {p.id: [] for p in problem.people}
     append = {p.id: [] for p in problem.people}
+
+    # loaner-bike notes (static, from the declared pairings)
+    for lender_id, borrower_id in mb.loaners:
+        prepend[borrower_id].append(
+            f"Loaner bike: you'll ride {mb.by_id[lender_id].name}'s spare bike "
+            f"(it returns to them afterward)."
+        )
+        prepend[lender_id].append(
+            f"Loaner bike: bring a spare bike for {mb.by_id[borrower_id].name}."
+        )
+
+    # overnight-bag notes: how each staying-over owner's bag reaches the hotel
+    for ob in problem.people:
+        if ob.bag_count <= 0:
+            continue
+        if ob.id in mb.home_tonight and solver.Value(mb.home_tonight[ob.id]):
+            continue  # went home that night — the bag was never needed at the finish
+        carrier = None
+        for o in mb.owners:
+            for k in range(NK):
+                for (a, b) in ALLOWED_ARCS[k]:
+                    key = (ob.id, o.id, k, a, b)
+                    if b == F and key in mb.gincar and solver.Value(mb.gincar[key]) > 0:
+                        carrier = o
+        if carrier is None:
+            continue
+        if mb.sag and carrier.id == mb.sag.id:
+            prepend[ob.id].append(
+                f"Overnight bag: bring it to {route.start_name} and hand it to the "
+                f"SAG wagon — it'll be waiting at the hotel in {route.finish_name}."
+            )
+        else:
+            prepend[ob.id].append(
+                f"Overnight bag: it rides {carrier.name}'s car to the hotel in "
+                f"{route.finish_name}."
+            )
+
     for o in mb.owners:
         for k in range(NK):
             for (a, b) in ALLOWED_ARCS[k]:
