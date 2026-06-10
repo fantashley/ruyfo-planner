@@ -68,6 +68,21 @@ Open http://127.0.0.1:8000, create an event, add participants, and click
 **Generate plan**. The database is a local SQLite file (`ruyfo.db`; override with
 the `RUYFO_DB` env var).
 
+## Fixtures (fixed rosters for testing)
+
+Keep a real roster as JSON in `fixtures/` and re-check plans as the model changes
+— see [`fixtures/README.md`](fixtures/README.md) for the schema.
+
+```bash
+.venv/bin/python -m scripts.fixture list             # list fixtures
+.venv/bin/python -m scripts.fixture plan example     # solve + print the plan (no DB)
+.venv/bin/python -m scripts.fixture load example     # seed it into the app DB for the web UI
+```
+
+`plan` is the quick feedback loop (no browser); `load` is idempotent (re-loading
+replaces the same-named event). Real rosters are git-ignored by default since they
+hold personal data — only the fictional `example.json` is tracked.
+
 ## Tests
 
 ```bash

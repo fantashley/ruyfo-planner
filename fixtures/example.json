@@ -1,0 +1,70 @@
+{
+  "event": {
+    "name": "Example RUYFO",
+    "route_key": "faribault_mankato",
+    "has_sag": true
+  },
+  "participants": [
+    {
+      "name": "Avery Brooks",
+      "home_zip": "55416",
+      "household": "Brooks",
+      "is_rider": true,
+      "num_bikes": 1,
+      "loaner_for": "Cory Diaz",
+      "bag_count": 1,
+      "has_car": true,
+      "car_combos": "5x3",
+      "can_drive_morning": true,
+      "return": {"tonight": "unwilling", "bikeback": "preferred", "ridehome": "acceptable"}
+    },
+    {
+      "name": "Blake Brooks",
+      "home_zip": "55416",
+      "household": "Brooks",
+      "is_rider": true,
+      "num_bikes": 1,
+      "has_car": false,
+      "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "acceptable"}
+    },
+    {
+      "name": "Cory Diaz",
+      "home_zip": "55408",
+      "is_rider": true,
+      "num_bikes": 0,
+      "has_car": false,
+      "return": {"tonight": "acceptable", "bikeback": "preferred", "ridehome": "acceptable"}
+    },
+    {
+      "name": "Dana Flores",
+      "home_zip": "55343",
+      "is_rider": true,
+      "num_bikes": 1,
+      "has_car": true,
+      "car_combos": "5x2",
+      "willing_drop_car": true,
+      "return": {"tonight": "preferred", "bikeback": "acceptable", "ridehome": "acceptable"}
+    },
+    {
+      "name": "Erin Park",
+      "home_zip": "55408",
+      "is_rider": true,
+      "num_bikes": 1,
+      "has_car": true,
+      "car_combos": "4x4",
+      "can_drive_morning": true,
+      "willing_drive_dropper_home": true,
+      "return": {"tonight": "acceptable", "bikeback": "acceptable", "ridehome": "preferred"}
+    },
+    {
+      "name": "Sam Rivera",
+      "home_zip": "55416",
+      "is_rider": false,
+      "has_car": true,
+      "car_combos": "8x8",
+      "is_sag_driver": true,
+      "can_drive_morning": true,
+      "willing_drive_dropper_home": true
+    }
+  ]
+}

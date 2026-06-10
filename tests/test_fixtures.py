@@ -1,0 +1,57 @@
+from sqlmodel import SQLModel, Session, create_engine, select
+
+from app import fixtures
+from app.models import Participant
+from app.solver import solve
+
+
+def test_example_fixture_solves_with_loaner_resolved():
+    fx = fixtures.load("example")
+    problem = fixtures.build_problem(fx)
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    # Cory borrows Avery's loaner — the by-name reference should resolve so Cory
+    # actually rides it (rather than a phantom bike).
+    cory = " ".join(sol.itineraries["Cory Diaz"]).lower()
+    assert "loaner" in cory and "avery" in cory
+
+
+def test_build_problem_defaults_and_return_prefs():
+    fx = {
+        "event": {"name": "T", "route_key": "faribault_mankato", "has_sag": False},
+        "participants": [
+            {"name": "Pat", "home_zip": "55021"},  # minimal: everything defaults
+            {"name": "Sam", "home_zip": "55021", "return": {"tonight": "unwilling"}},
+        ],
+    }
+    problem = fixtures.build_problem(fx)
+    pat, sam = problem.people
+    assert pat.is_rider and pat.num_bikes == 1 and not pat.has_car
+    # omitted return keys fall back to defaults; specified ones win
+    from app.solver import Pref, ReturnOption
+    assert sam.return_prefs[ReturnOption.DRIVE_HOME_TONIGHT] == Pref.UNWILLING
+    assert sam.return_prefs[ReturnOption.HOTEL_BIKE_BACK] == Pref.ACCEPTABLE
+
+
+def test_seed_event_persists_and_resolves_loaner():
+    engine = create_engine("sqlite://")  # in-memory
+    SQLModel.metadata.create_all(engine)
+    fx = fixtures.load("example")
+    with Session(engine) as s:
+        ev = fixtures.seed_event(s, fx)
+        parts = s.exec(select(Participant).where(Participant.event_id == ev.id)).all()
+        assert len(parts) == len(fx["participants"])
+        avery = next(p for p in parts if p.name == "Avery Brooks")
+        cory = next(p for p in parts if p.name == "Cory Diaz")
+        assert avery.loaner_for == str(cory.id)  # name resolved to participant id
+
+
+def test_seed_event_replaces_same_named_event():
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    fx = fixtures.load("example")
+    with Session(engine) as s:
+        fixtures.seed_event(s, fx)
+        fixtures.seed_event(s, fx)  # second load replaces the first
+        from app.models import Event
+        assert len(s.exec(select(Event)).all()) == 1

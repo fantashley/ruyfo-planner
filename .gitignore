@@ -3,4 +3,10 @@ __pycache__/
 *.pyc
 *.db
 .pytest_cache/
+*.egg-info/
 .DS_Store
+
+# Real rosters contain personal data (names, home ZIPs, emails) — keep them local.
+# Only the fictional example is tracked; `git add -f` to override for a roster.
+fixtures/*.json
+!fixtures/example.json
