@@ -170,6 +170,7 @@ def test_loaner_bike_lets_a_bikeless_rider_ride():
     bo_steps = " ".join(sol.itineraries["bo"]).lower()
     assert "loaner" in bo_steps and "alex" in bo_steps
     assert any("spare bike for Bo" in s for s in sol.itineraries["alex"])
+    assert any("loaner for Bo" in move for move in sol.car_moves)
 
 
 def test_bikeless_rider_without_loaner_or_sag_is_infeasible():

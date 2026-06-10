@@ -792,11 +792,15 @@ def _extract(problem, mb, solver, status) -> Solution:
                         and solver.Value(mb.incar[p.id, o.id, k, a, b])
                     ]
                     bikes = 0
+                    bike_parts = []
                     bags = 0
                     for ob in problem.people:
                         key = (ob.id, o.id, k, a, b)
                         if key in mb.bincar:
-                            bikes += solver.Value(mb.bincar[key])
+                            count = solver.Value(mb.bincar[key])
+                            bikes += count
+                            if count:
+                                bike_parts.append(_bike_cargo_label(mb, ob, count))
                         if key in mb.gincar:
                             bags += solver.Value(mb.gincar[key])
                     # hide only truly empty no-op moves (owner lives at the
@@ -809,11 +813,16 @@ def _extract(problem, mb, solver, status) -> Solution:
                     ):
                         continue
                     who = f" + {', '.join(passengers)}" if passengers else ""
+                    if bike_parts:
+                        biketxt = f"{bikes} bike{'s' if bikes != 1 else ''}: "
+                        biketxt += ", ".join(bike_parts)
+                    else:
+                        biketxt = "0 bikes"
                     bagtxt = f"; {bags} bag{'s' if bags != 1 else ''}" if bags else ""
                     sol.car_moves.append(
                         f"{TRANSITION_LABELS[k]}: {o.name}'s car "
                         f"{_loc_name(problem, o, a)} → {_loc_name(problem, o, b)} "
-                        f"(driver{who}; {bikes} bike{'s' if bikes != 1 else ''}{bagtxt})"
+                        f"(driver{who}; {biketxt}{bagtxt})"
                     )
 
     # Bike hand-offs (presentation only): when a bike rides in someone else's
@@ -901,3 +910,31 @@ def _extract(problem, mb, solver, status) -> Solution:
                 base = []
             sol.itineraries[p.id] = prepend[p.id] + base + append[p.id]
     return sol
+
+
+def _bike_cargo_label(mb, owner: Person, count: int) -> str:
+    """Readable description for bikes in a car, including declared loaners."""
+    borrowers = [
+        mb.by_id[borrower_id].name
+        for lender_id, borrower_id in mb.loaners
+        if lender_id == owner.id
+    ]
+    if not borrowers:
+        bike_word = "bike" if count == 1 else "bikes"
+        return f"{owner.name}: {count} {bike_word}"
+
+    own = owner.num_bikes
+    parts = []
+    if own:
+        parts.append(f"{own} own")
+    for borrower in borrowers:
+        parts.append(f"loaner for {borrower}")
+
+    if count == mb.total_bikes[owner.id]:
+        bike_word = "bike" if count == 1 else "bikes"
+        return f"{owner.name}: {count} {bike_word} ({', '.join(parts)})"
+
+    # Usually the model carries all bikes for an owner together, but if it splits
+    # them, avoid pretending we know exactly which individual bike is in this car.
+    bike_word = "bike" if count == 1 else "bikes"
+    return f"{owner.name}: {count} of {mb.total_bikes[owner.id]} {bike_word}"
