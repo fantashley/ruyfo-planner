@@ -158,6 +158,7 @@ ALLOWED_ARCS[0] = [(H, F), (H, S)]
 
 SCALE = 10  # miles -> integer units
 ZERO_MI = 0.05  # legs shorter than this are "you already live there" no-ops
+CARGO_TIEBREAKER_WEIGHT = 10_000
 
 
 def _arc_distance(person_home_zip: str, route: Route, frm: str, to: str) -> float:
@@ -589,6 +590,11 @@ class _Model:
             rh = m.NewBoolVar(f"ridehome_{p.id}")
             m.Add(rh == 1 - ht - bb)
             self.opt_ridehome[p.id] = rh
+            # If someone went home the night of the ride, they're done: no
+            # next-morning errands or passenger legs. Their bikes/bags may still
+            # be ferried by someone who stayed over.
+            for t in range(T_HOME_TONIGHT, NK + 1):
+                m.Add(self.pat[p.id, t, H] >= ht)
 
             options = {
                 ReturnOption.DRIVE_HOME_TONIGHT: ht,
@@ -643,6 +649,9 @@ class _Model:
 
         self.dist_total = m.NewIntVar(0, 10_000_000, "dist_total")
         m.Add(self.dist_total == sum(dist_terms))
+        cargo_terms = list(self.bincar.values()) + list(self.gincar.values())
+        self.cargo_motion_total = m.NewIntVar(0, 10_000_000, "cargo_motion_total")
+        m.Add(self.cargo_motion_total == sum(cargo_terms))
         pen = round(self.p.pref_penalty_miles * SCALE)
 
         # ---- fairness: per-person burden + soft minimax ---------------------- #
@@ -651,12 +660,15 @@ class _Model:
         # The fairness weight is fractional, so scale the whole objective by 10
         # to keep CP-SAT coefficients integral (0.1 granularity on the weight).
         fw = round(self.p.fairness_weight * 10)
-        self.m.Minimize(
+        primary_objective = (
             10 * self.dist_total + 10 * pen * sum(pref_terms) + fw * self.max_burden
+        )
+        self.m.Minimize(
+            CARGO_TIEBREAKER_WEIGHT * primary_objective + self.cargo_motion_total
         )
 
     def _is_sag_sweep(self, owner_id: str, k: int, a: str, b: str) -> bool:
-        """The SAG wagon's route sweep — the volunteered role, not an assigned chore."""
+        """The SAG wagon's route sweep (start -> finish during the ride)."""
         return bool(
             self.sag
             and owner_id == self.sag.id
@@ -667,7 +679,7 @@ class _Model:
     def _build_burdens(self, pen: int):
         """Per-person burden in scaled equivalent miles.
 
-        burden = own-car driving miles (minus the SAG's intrinsic route sweep)
+        burden = own-car driving miles
                + chore_leg_miles per chore leg (night-before legs; next-morning
                  legs by someone who was already home that night)
                + pref_penalty_miles if they landed on a merely-acceptable return.
@@ -682,8 +694,6 @@ class _Model:
                 for k in range(NK):
                     for (a, b) in ALLOWED_ARCS[k]:
                         if (p.id, k, a, b) not in self.cmove:
-                            continue
-                        if self._is_sag_sweep(p.id, k, a, b):
                             continue
                         mv = self.cmove[p.id, k, a, b]
                         base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
@@ -825,8 +835,6 @@ def _extract(problem, mb, solver, status) -> Solution:
                 for (a, b) in ALLOWED_ARCS[k]:
                     key = (p.id, k, a, b)
                     if key not in mb.cmove or not solver.Value(mb.cmove[key]):
-                        continue
-                    if mb._is_sag_sweep(p.id, k, a, b):
                         continue
                     drive_units += round(_arc_distance(p.home_zip, route, a, b) * SCALE)
                     if k in NIGHT_BEFORE or (k >= T_BIKEBACK and home_tonight):
@@ -997,7 +1005,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                             f"{route.start_name} (they drop it off the night before, or "
                             f"you pick it up)."
                         )
-                    elif b == H and (ob.id, o.id) not in seen_back:
+                    elif b == H and k > T_RIDE and (ob.id, o.id) not in seen_back:
                         seen_back.add((ob.id, o.id))
                         append[ob.id].append(
                             f"Bike hand-off: {o.name} brings your bike back near your "

@@ -315,6 +315,73 @@ def test_no_before_ride_day_note_for_a_post_ride_bike_return():
     assert any("brings your bike back" in s for s in steps)  # the real return is shown
 
 
+def test_no_return_handoff_note_for_pre_ride_bike_shuttle():
+    # A bike may ride through a carrier's home while being staged for the start.
+    # That pre-ride shuttle should not look like an after-the-ride bike return.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55060", has_car=False,
+        return_prefs=only(BIKEBACK),
+    )
+    bob = Person(
+        id="bob", name="Bob", home_zip="55060", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=2)], can_drive_morning=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, bob])
+    mb = _Model(problem)
+    mb.m.Add(mb.bincar["ann", "bob", 0, H, F] == 1)
+    mb.m.Add(mb.bincar["ann", "bob", 1, F, H] == 1)
+    mb.m.Add(mb.bincar["ann", "bob", T_MORNING, H, S] == 1)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    sol = _extract(problem, mb, solver, status)
+    steps = sol.itineraries["ann"]
+    assert not any("brings your bike back" in s for s in steps)
+
+
+def test_cargo_prefers_direct_leg_when_car_route_is_fixed():
+    # If a car is already making an unrelated round trip, cargo should not tag
+    # along unless it helps. The bike can wait for the direct morning leg.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55060", has_car=False,
+        return_prefs=only(BIKEBACK),
+    )
+    bob = Person(
+        id="bob", name="Bob", home_zip="55060", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=2)], can_drive_morning=True,
+        return_prefs=only(RIDEHOME),
+    )
+    mb = _Model(Problem(route=ROUTE, people=[ann, bob]))
+    mb.m.Add(mb.cmove["bob", 0, H, F] == 1)
+    mb.m.Add(mb.cmove["bob", 1, F, H] == 1)
+    mb.m.Add(mb.cmove["bob", T_MORNING, H, S] == 1)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mb.bincar["ann", "bob", 0, H, F]) == 0
+    assert solver.Value(mb.bincar["ann", "bob", 1, F, H]) == 0
+    assert solver.Value(mb.bincar["ann", "bob", T_MORNING, H, S]) == 1
+
+
+def test_home_tonight_person_cannot_have_saturday_activity():
+    # If a person goes home the night of the ride, they should not be assigned
+    # any next-morning passenger/driver activity. Force such a leg and the model
+    # should become infeasible.
+    rider = Person(
+        id="rider", name="Rider", home_zip="55021", has_car=True,
+        return_prefs=only(TONIGHT),
+    )
+    sag = Person(
+        id="sag", name="Sag", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(8, 8)], is_sag_driver=True, can_drive_morning=True,
+    )
+    mb = _Model(Problem(route=ROUTE, people=[rider, sag], has_sag=True))
+    mb.m.Add(mb.home_tonight["rider"] == 1)
+    mb.m.Add(mb.incar["rider", "rider", T_BIKEBACK, H, F] == 1)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) == cp_model.INFEASIBLE
+
+
 def test_supporter_return_preference_is_honored():
     # A SAG driver / supporter is now a full participant for return purposes: if
     # they're unwilling to head home the next morning, they must be home the night
@@ -351,9 +418,9 @@ def test_burden_accounting_is_consistent():
     assert sol.burdens["h2"]["total"] == 0  # no car, no chores, preferred return
 
 
-def test_sag_route_sweep_is_not_counted_as_burden():
-    # The SAG's start->finish sweep during the ride is the volunteered role, not
-    # an assigned chore, so it must not appear in the driver's burden miles.
+def test_sag_route_sweep_is_counted_as_burden():
+    # The SAG's start->finish sweep during the ride is real driving, so it should
+    # count toward the SAG driver's burden.
     dana = Person(
         id="dana", name="Dana", home_zip="55021", has_car=False,
         return_prefs={TONIGHT: Pref.PREFERRED, BIKEBACK: Pref.UNWILLING,
@@ -366,19 +433,19 @@ def test_sag_route_sweep_is_not_counted_as_burden():
     )
     sol = solve(Problem(route=ROUTE, people=[dana, sage], has_sag=True))
     assert sol.status in ("optimal", "feasible")
-    # Sage lives in the start town: her counted miles are just the finish->home
-    # return (~37 straight-line), not sweep + return (~75)
-    assert 25 < sol.burdens["sage"]["drive_miles"] < 50
+    # Sage lives in the start town: counted miles are sweep + finish->home (~75),
+    # not just finish->home (~37).
+    assert 65 < sol.burdens["sage"]["drive_miles"] < 85
 
 
-def test_fairness_spreads_the_next_morning_chore():
-    # Six carless riders need a morning lift to the start and a next-morning
-    # pickup after biking back. Either supporter could do both runs; with the
-    # fairness term the two runs split between them instead of piling on one.
+def test_fairness_can_trade_miles_for_lower_max_burden():
+    # Two carless riders need a morning lift to the start and an evening ride
+    # home from the finish. One supporter can do all the driving with fewer total
+    # miles, but the fairness term may split duties to lower the heaviest load.
     riders = [
         Person(id=f"r{i}", name=f"R{i}", home_zip="55060", has_car=False,
-               return_prefs=only(BIKEBACK))
-        for i in range(6)
+               return_prefs=only(TONIGHT))
+        for i in range(2)
     ]
     sup1 = Person(
         id="sup1", name="Sup1", home_zip="55060", is_rider=False, has_car=True,
@@ -388,19 +455,18 @@ def test_fairness_spreads_the_next_morning_chore():
         id="sup2", name="Sup2", home_zip="55060", is_rider=False, has_car=True,
         car_combos=[CarCombo(people=8, bikes=8)], can_drive_morning=True,
     )
-    # chore_leg_miles=5 so the split plan strictly beats one person staying over
     problem = Problem(
         route=ROUTE, people=riders + [sup1, sup2],
         fairness_weight=2.0, chore_leg_miles=5.0,
     )
     sol = solve(problem)
     assert sol.status in ("optimal", "feasible")
-    # both supporters share the driving rather than one doing everything
+    # both supporters share the driving rather than one doing everything.
     assert sol.burdens["sup1"]["drive_miles"] > 0
     assert sol.burdens["sup2"]["drive_miles"] > 0
 
-    # with fairness off, one supporter carries the whole load (cheaper in total
-    # miles), and the max burden is strictly worse than the fair plan's
+    # With fairness off, one supporter carries the whole load because it is
+    # cheaper in total miles; the max burden is worse than the fair plan's.
     sol0 = solve(Problem(route=ROUTE, people=riders + [sup1, sup2],
                          fairness_weight=0.0, chore_leg_miles=5.0))
     assert sol0.total_drive_miles < sol.total_drive_miles  # fairness costs miles
