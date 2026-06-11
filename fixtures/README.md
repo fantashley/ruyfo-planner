@@ -21,6 +21,12 @@ python -m scripts.fixture load example         # seed it into the app DB for the
     "route_key": "faribault_mankato",      // or "wayzata_hutchinson"
     "has_sag": true                        // is a SAG wagon available?
   },
+  "tuning": {                              // optional solver knobs (defaults shown)
+    "fairness_weight": 0.5,                // weight on the most-burdened person's load
+    "chore_leg_miles": 15,                 // equivalent miles charged per chore car leg
+    "pref_penalty_miles": 30,              // cost of a merely-acceptable return option
+    "detour_factor": 1.0                   // multiplier on pickup-detour distance
+  },
   "participants": [ { …person… }, … ]
 }
 ```

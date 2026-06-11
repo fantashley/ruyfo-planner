@@ -16,6 +16,7 @@
   <div class="summary">
     <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>total drive miles</span></div>
     <div class="stat"><b>{{ solution.pref_deviations }}</b><span>on a backup return option</span></div>
+    <div class="stat"><b>{{ "%.0f"|format(solution.max_burden) }}</b><span>heaviest individual burden</span></div>
     <div class="stat"><b>{{ solution.status }}</b><span>solution</span></div>
   </div>
 
@@ -29,6 +30,13 @@
       {% set sid = p.id|string %}
       {% if sid in solution.return_outcome %}
         <p class="badge">Return: {{ RETURN_LABELS[solution.return_outcome[sid]] }}</p>
+      {% endif %}
+      {% if sid in solution.burdens %}
+        {% set b = solution.burdens[sid] %}
+        <p class="muted burden">Burden: {{ "%.0f"|format(b.total) }} eq-mi
+          — drives {{ "%.0f"|format(b.drive_miles) }} mi{% if b.chore_legs %},
+          {{ b.chore_legs }} chore leg{{ "s" if b.chore_legs != 1 }}{% endif %}{% if b.deviation %},
+          backup return{% endif %}</p>
       {% endif %}
       <ol>
         {% for step in solution.itineraries[sid] %}

@@ -113,6 +113,8 @@ class Problem:
     # tuning knobs (all in "miles" units)
     detour_factor: float = 1.0  # multiplier on pickup-detour distance
     pref_penalty_miles: float = 30.0  # cost of a merely-acceptable return option
+    fairness_weight: float = 0.5  # weight on the most-burdened person's load
+    chore_leg_miles: float = 15.0  # equivalent miles charged per "chore" car leg
 
 
 # --------------------------------------------------------------------------- #
@@ -181,6 +183,9 @@ class Solution:
     itineraries: dict[str, list[str]] = field(default_factory=dict)  # person id -> steps
     car_moves: list[str] = field(default_factory=list)
     return_outcome: dict[str, ReturnOption] = field(default_factory=dict)
+    # person id -> {"total", "drive_miles", "chore_legs", "deviation"} equivalent-mile burden
+    burdens: dict[str, dict] = field(default_factory=dict)
+    max_burden: float = 0.0
     message: str = ""
 
 
@@ -562,6 +567,7 @@ class _Model:
         self.home_tonight = {}
         self.opt_bikeback = {}
         self.opt_ridehome = {}
+        self.deviation = {}
 
         pref_terms = []
         # everyone (riders *and* supporters/SAG driver) gets a return preference:
@@ -589,12 +595,19 @@ class _Model:
                 ReturnOption.HOTEL_BIKE_BACK: bb,
                 ReturnOption.HOTEL_RIDE_HOME: rh,
             }
+            acceptable_vars = []
             for opt, var in options.items():
                 pr = p.pref(opt)
                 if pr == Pref.UNWILLING:
                     m.Add(var == 0)
                 elif pr == Pref.ACCEPTABLE:
-                    pref_terms.append(var)
+                    acceptable_vars.append(var)
+            # exactly one option is true, so this sums to 0 or 1: did this person
+            # land on a merely-acceptable option instead of their preferred one?
+            dev = m.NewBoolVar(f"dev_{p.id}")
+            m.Add(dev == sum(acceptable_vars))
+            self.deviation[p.id] = dev
+            pref_terms.append(dev)
 
         # overnight bags depend on home_tonight, so build them now
         self._build_bags()
@@ -631,7 +644,67 @@ class _Model:
         self.dist_total = m.NewIntVar(0, 10_000_000, "dist_total")
         m.Add(self.dist_total == sum(dist_terms))
         pen = round(self.p.pref_penalty_miles * SCALE)
-        self.m.Minimize(self.dist_total + pen * sum(pref_terms))
+
+        # ---- fairness: per-person burden + soft minimax ---------------------- #
+        self._build_burdens(pen)
+
+        # The fairness weight is fractional, so scale the whole objective by 10
+        # to keep CP-SAT coefficients integral (0.1 granularity on the weight).
+        fw = round(self.p.fairness_weight * 10)
+        self.m.Minimize(
+            10 * self.dist_total + 10 * pen * sum(pref_terms) + fw * self.max_burden
+        )
+
+    def _is_sag_sweep(self, owner_id: str, k: int, a: str, b: str) -> bool:
+        """The SAG wagon's route sweep — the volunteered role, not an assigned chore."""
+        return bool(
+            self.sag
+            and owner_id == self.sag.id
+            and k == T_RIDE
+            and (a, b) == (S, F)
+        )
+
+    def _build_burdens(self, pen: int):
+        """Per-person burden in scaled equivalent miles.
+
+        burden = own-car driving miles (minus the SAG's intrinsic route sweep)
+               + chore_leg_miles per chore leg (night-before legs; next-morning
+                 legs by someone who was already home that night)
+               + pref_penalty_miles if they landed on a merely-acceptable return.
+        """
+        m = self.m
+        chore = round(self.p.chore_leg_miles * SCALE)
+        self.burden = {}
+        for p in self.people:
+            terms = [pen * self.deviation[p.id]]
+            if p.has_car:
+                ht = self.home_tonight[p.id]
+                for k in range(NK):
+                    for (a, b) in ALLOWED_ARCS[k]:
+                        if (p.id, k, a, b) not in self.cmove:
+                            continue
+                        if self._is_sag_sweep(p.id, k, a, b):
+                            continue
+                        mv = self.cmove[p.id, k, a, b]
+                        base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
+                        if base:
+                            terms.append(base * mv)
+                        if k in NIGHT_BEFORE and chore:
+                            terms.append(chore * mv)
+                        elif k >= T_BIKEBACK and chore:
+                            # a next-morning leg is a chore only if they were home
+                            # tonight (had to go back out); an overnighter driving
+                            # home is just their own return
+                            both = m.NewBoolVar(f"chore_{p.id}_{k}_{a}{b}")
+                            m.Add(both <= mv)
+                            m.Add(both <= ht)
+                            m.Add(both >= mv + ht - 1)
+                            terms.append(chore * both)
+            bvar = m.NewIntVar(0, 10_000_000, f"burden_{p.id}")
+            m.Add(bvar == sum(terms))
+            self.burden[p.id] = bvar
+        self.max_burden = m.NewIntVar(0, 10_000_000, "max_burden")
+        m.AddMaxEquality(self.max_burden, list(self.burden.values()))
 
 
 # --------------------------------------------------------------------------- #
@@ -741,6 +814,30 @@ def _extract(problem, mb, solver, status) -> Solution:
         if p.pref(opt) == Pref.ACCEPTABLE:
             deviations += 1
     sol.pref_deviations = deviations
+
+    # per-person burden breakdown (mirrors _build_burdens)
+    for p in problem.people:
+        drive_units = 0
+        chore_legs = 0
+        home_tonight = bool(solver.Value(mb.home_tonight[p.id]))
+        if p.has_car:
+            for k in range(NK):
+                for (a, b) in ALLOWED_ARCS[k]:
+                    key = (p.id, k, a, b)
+                    if key not in mb.cmove or not solver.Value(mb.cmove[key]):
+                        continue
+                    if mb._is_sag_sweep(p.id, k, a, b):
+                        continue
+                    drive_units += round(_arc_distance(p.home_zip, route, a, b) * SCALE)
+                    if k in NIGHT_BEFORE or (k >= T_BIKEBACK and home_tonight):
+                        chore_legs += 1
+        sol.burdens[p.id] = {
+            "total": round(solver.Value(mb.burden[p.id]) / SCALE, 1),
+            "drive_miles": round(drive_units / SCALE, 1),
+            "chore_legs": chore_legs,
+            "deviation": bool(solver.Value(mb.deviation[p.id])),
+        }
+    sol.max_burden = round(solver.Value(mb.max_burden) / SCALE, 1)
 
     # per-person itinerary
     for p in problem.people:

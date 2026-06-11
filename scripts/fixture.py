@@ -40,6 +40,20 @@ def _print_plan(fixture: dict) -> int:
     print("Car movements:")
     for move in sol.car_moves:
         print(f"   * {move}")
+    print(
+        f"\nBurden (equivalent miles; drive + {problem.chore_leg_miles:.0f}/chore leg "
+        f"+ {problem.pref_penalty_miles:.0f} if on a backup return):"
+    )
+    for p in problem.people:
+        b = sol.burdens[p.id]
+        flags = []
+        if b["chore_legs"]:
+            flags.append(f"{b['chore_legs']} chore leg{'s' if b['chore_legs'] != 1 else ''}")
+        if b["deviation"]:
+            flags.append("backup return")
+        extra = f" ({', '.join(flags)})" if flags else ""
+        marker = "  ← max" if b["total"] == sol.max_burden and sol.max_burden > 0 else ""
+        print(f"   {p.name:12} {b['total']:6.1f}  drives {b['drive_miles']:.0f} mi{extra}{marker}")
     print()
     return 0
 

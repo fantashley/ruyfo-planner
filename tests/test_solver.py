@@ -328,6 +328,79 @@ def test_supporter_return_preference_is_honored():
     assert sol.return_outcome["sag"] == TONIGHT
 
 
+def test_burden_accounting_is_consistent():
+    # max_burden matches the per-person totals, and a carless participant on
+    # their preferred return carries no burden at all.
+    h1 = Person(
+        id="h1", name="Pat", home_zip="55021", household="ek", has_car=True,
+        car_combos=[CarCombo(people=4, bikes=4)], return_prefs=only(BIKEBACK),
+    )
+    h2 = Person(
+        id="h2", name="Sam", home_zip="55021", household="ek", has_car=False,
+        return_prefs=only(BIKEBACK),
+    )
+    sol = solve(Problem(route=ROUTE, people=[h1, h2]))
+    assert sol.status in ("optimal", "feasible")
+    assert sol.max_burden == max(b["total"] for b in sol.burdens.values())
+    assert sol.burdens["h2"]["total"] == 0  # no car, no chores, preferred return
+
+
+def test_sag_route_sweep_is_not_counted_as_burden():
+    # The SAG's start->finish sweep during the ride is the volunteered role, not
+    # an assigned chore, so it must not appear in the driver's burden miles.
+    dana = Person(
+        id="dana", name="Dana", home_zip="55021", has_car=False,
+        return_prefs={TONIGHT: Pref.PREFERRED, BIKEBACK: Pref.UNWILLING,
+                      RIDEHOME: Pref.UNWILLING},
+    )
+    sage = Person(
+        id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
+        can_drive_morning=True,
+    )
+    sol = solve(Problem(route=ROUTE, people=[dana, sage], has_sag=True))
+    assert sol.status in ("optimal", "feasible")
+    # Sage lives in the start town: her counted miles are just the finish->home
+    # return (~37 straight-line), not sweep + return (~75)
+    assert 25 < sol.burdens["sage"]["drive_miles"] < 50
+
+
+def test_fairness_spreads_the_next_morning_chore():
+    # Six carless riders need a morning lift to the start and a next-morning
+    # pickup after biking back. Either supporter could do both runs; with the
+    # fairness term the two runs split between them instead of piling on one.
+    riders = [
+        Person(id=f"r{i}", name=f"R{i}", home_zip="55060", has_car=False,
+               return_prefs=only(BIKEBACK))
+        for i in range(6)
+    ]
+    sup1 = Person(
+        id="sup1", name="Sup1", home_zip="55060", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], can_drive_morning=True,
+    )
+    sup2 = Person(
+        id="sup2", name="Sup2", home_zip="55060", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], can_drive_morning=True,
+    )
+    # chore_leg_miles=5 so the split plan strictly beats one person staying over
+    problem = Problem(
+        route=ROUTE, people=riders + [sup1, sup2],
+        fairness_weight=2.0, chore_leg_miles=5.0,
+    )
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+    # both supporters share the driving rather than one doing everything
+    assert sol.burdens["sup1"]["drive_miles"] > 0
+    assert sol.burdens["sup2"]["drive_miles"] > 0
+
+    # with fairness off, one supporter carries the whole load (cheaper in total
+    # miles), and the max burden is strictly worse than the fair plan's
+    sol0 = solve(Problem(route=ROUTE, people=riders + [sup1, sup2],
+                         fairness_weight=0.0, chore_leg_miles=5.0))
+    assert sol0.total_drive_miles < sol.total_drive_miles  # fairness costs miles
+    assert sol.max_burden < sol0.max_burden  # ...but lightens the heaviest load
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

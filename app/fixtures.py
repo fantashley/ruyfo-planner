@@ -76,7 +76,22 @@ def build_problem(fixture: dict) -> Problem:
                 return_prefs={opt: Pref(ret[k]) for k, opt in _RETURN_KEYS.items()},
             )
         )
-    return Problem(route=get_route(ev["route_key"]), people=people, has_sag=ev.get("has_sag", False))
+    tuning = fixture.get("tuning", {})
+    return Problem(
+        route=get_route(ev["route_key"]),
+        people=people,
+        has_sag=ev.get("has_sag", False),
+        **{
+            k: float(tuning[k])
+            for k in (
+                "detour_factor",
+                "pref_penalty_miles",
+                "fairness_weight",
+                "chore_leg_miles",
+            )
+            if k in tuning
+        },
+    )
 
 
 def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:

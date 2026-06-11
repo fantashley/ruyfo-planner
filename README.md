@@ -106,11 +106,22 @@ supporter, SAG wagon, households, and an over-constrained infeasible case).
 
 ## Tuning
 
-`Problem` in `app/solver.py` exposes two knobs (both in "miles" units):
+`Problem` in `app/solver.py` exposes four knobs (all in "miles" units):
 
 - `detour_factor` — how much an out-of-the-way passenger/bike pickup costs.
 - `pref_penalty_miles` — how many extra driving miles you'd trade to keep one
   person on their *preferred* return option instead of a merely *acceptable* one.
+- `fairness_weight` (default 0.5) — weight on the **most-burdened person's load**.
+  A person's burden = miles they drive (the SAG's route sweep doesn't count — that's
+  the volunteered role) + `chore_leg_miles` per chore leg (night-before drops;
+  going back out the next morning) + the preference penalty if they're on a backup
+  return. The optimizer pays up to `fairness_weight × Δ` extra total miles to take
+  `Δ` off the heaviest plate. Set 0 for pure efficiency.
+- `chore_leg_miles` (default 15) — equivalent-mile cost of one chore leg above.
+
+Plans report each person's burden (CLI table and plan page), so you can see who
+carries the event and turn the dial if it looks lopsided. Fixtures can set these
+in an event-level `"tuning"` block (see `fixtures/README.md`).
 
 ## Known approximations
 

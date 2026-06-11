@@ -33,6 +33,20 @@ def test_build_problem_defaults_and_return_prefs():
     assert sam.return_prefs[ReturnOption.HOTEL_BIKE_BACK] == Pref.ACCEPTABLE
 
 
+def test_tuning_block_is_forwarded_to_problem():
+    fx = {
+        "event": {"name": "T", "route_key": "faribault_mankato"},
+        "tuning": {"fairness_weight": 1.5, "chore_leg_miles": 5,
+                   "pref_penalty_miles": 40},
+        "participants": [{"name": "Pat", "home_zip": "55021"}],
+    }
+    problem = fixtures.build_problem(fx)
+    assert problem.fairness_weight == 1.5
+    assert problem.chore_leg_miles == 5.0
+    assert problem.pref_penalty_miles == 40.0
+    assert problem.detour_factor == 1.0  # untouched default
+
+
 def test_seed_event_persists_and_resolves_loaner():
     engine = create_engine("sqlite://")  # in-memory
     SQLModel.metadata.create_all(engine)
