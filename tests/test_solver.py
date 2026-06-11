@@ -500,9 +500,10 @@ def test_burden_accounting_is_consistent():
     assert sol.burdens["h2"]["total"] == 0  # no car, no chores, preferred return
 
 
-def test_passenger_on_chore_leg_gets_burden_miles():
+def test_passenger_on_chore_leg_gets_chore_surcharge():
     # Riding home from a night-before drop is still part of the logistical load,
-    # even for the passenger.
+    # even for the passenger, but it counts as a fixed chore leg rather than
+    # distance-based driving burden.
     rider = Person(
         id="rider", name="Rider", home_zip="55021", has_car=True,
         willing_drop_car=True, return_prefs=only(TONIGHT),
@@ -517,13 +518,13 @@ def test_passenger_on_chore_leg_gets_burden_miles():
     status = solver.Solve(mb.m)
     assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     sol = _extract(Problem(route=ROUTE, people=[rider, helper]), mb, solver, status)
-    assert sol.burdens["rider"]["passenger_chore_miles"] > 0
-    assert sol.burdens["rider"]["total"] >= sol.burdens["rider"]["passenger_chore_miles"]
+    assert sol.burdens["rider"]["chore_legs"] >= 1
+    assert sol.burdens["rider"]["total"] >= 15
 
 
-def test_sag_route_sweep_is_counted_as_burden():
-    # The SAG's start->finish sweep during the ride is real driving, so it should
-    # count toward the SAG driver's burden.
+def test_sag_driver_legs_are_counted_as_chore_burden():
+    # Every leg driven by the SAG driver is real driving and a chore, so the
+    # SAG driver's burden includes both drive miles and chore surcharges.
     dana = Person(
         id="dana", name="Dana", home_zip="55021", has_car=False,
         return_prefs={TONIGHT: Pref.PREFERRED, BIKEBACK: Pref.UNWILLING,
@@ -534,11 +535,20 @@ def test_sag_route_sweep_is_counted_as_burden():
         car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
         can_drive_morning=True,
     )
-    sol = solve(Problem(route=ROUTE, people=[dana, sage], has_sag=True))
-    assert sol.status in ("optimal", "feasible")
+    problem = Problem(route=ROUTE, people=[dana, sage], has_sag=True)
+    mb = _Model(problem)
+    mb.m.Add(mb.cmove["sage", T_RIDE, S, F] == 1)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    sol = _extract(problem, mb, solver, status)
     # Sage lives in the start town: counted miles are sweep + finish->home (~75),
     # not just finish->home (~37).
     assert 65 < sol.burdens["sage"]["drive_miles"] < 85
+    assert sol.burdens["sage"]["chore_legs"] == 3
+    assert 110 < sol.burdens["sage"]["total"] < 130
+    assert sol.burdens["dana"]["chore_legs"] == 0
+    assert sol.burdens["dana"]["total"] == 0
 
 
 def test_fairness_can_trade_miles_for_lower_max_burden():

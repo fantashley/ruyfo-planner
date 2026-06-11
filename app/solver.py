@@ -708,13 +708,16 @@ class _Model:
             and (a, b) == (S, F)
         )
 
+    def _is_sag_drive(self, owner_id: str) -> bool:
+        """Any leg driven by the designated SAG driver."""
+        return bool(self.sag and owner_id == self.sag.id)
+
     def _build_burdens(self, pen: int):
         """Per-person burden in scaled equivalent miles.
 
         burden = own-car driving miles
-               + passenger miles on chore legs
-               + chore_leg_miles per chore leg (night-before legs; next-morning
-                 legs by someone who was already home that night)
+               + chore_leg_miles per chore leg (night-before legs; SAG driver legs;
+                 next-morning legs by someone who was already home that night)
                + pref_penalty_miles if they landed on a merely-acceptable return.
         """
         m = self.m
@@ -732,7 +735,7 @@ class _Model:
                         base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
                         if base:
                             terms.append(base * mv)
-                        if k in NIGHT_BEFORE and chore:
+                        if (k in NIGHT_BEFORE or self._is_sag_drive(p.id)) and chore:
                             terms.append(chore * mv)
                         elif k >= T_BIKEBACK and chore:
                             # a next-morning leg is a chore only if they were home
@@ -753,17 +756,14 @@ class _Model:
                         if key not in self.incar:
                             continue
                         ride = self.incar[key]
-                        base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
-                        if not base:
-                            continue
                         if k in NIGHT_BEFORE:
-                            terms.append(base * ride)
+                            terms.append(chore * ride)
                         elif k >= T_BIKEBACK:
                             both = m.NewBoolVar(f"passenger_chore_{p.id}_{o.id}_{k}_{a}{b}")
                             m.Add(both <= ride)
                             m.Add(both <= owner_ht)
                             m.Add(both >= ride + owner_ht - 1)
-                            terms.append(base * both)
+                            terms.append(chore * both)
             bvar = m.NewIntVar(0, 10_000_000, f"burden_{p.id}")
             m.Add(bvar == sum(terms))
             self.burden[p.id] = bvar
@@ -882,7 +882,6 @@ def _extract(problem, mb, solver, status) -> Solution:
     # per-person burden breakdown (mirrors _build_burdens)
     for p in problem.people:
         drive_units = 0
-        passenger_chore_units = 0
         chore_legs = 0
         home_tonight = bool(solver.Value(mb.home_tonight[p.id]))
         if p.has_car:
@@ -892,7 +891,11 @@ def _extract(problem, mb, solver, status) -> Solution:
                     if key not in mb.cmove or not solver.Value(mb.cmove[key]):
                         continue
                     drive_units += round(_arc_distance(p.home_zip, route, a, b) * SCALE)
-                    if k in NIGHT_BEFORE or (k >= T_BIKEBACK and home_tonight):
+                    if (
+                        k in NIGHT_BEFORE
+                        or mb._is_sag_drive(p.id)
+                        or (k >= T_BIKEBACK and home_tonight)
+                    ):
                         chore_legs += 1
         for o in mb.owners:
             if o.id == p.id:
@@ -904,13 +907,10 @@ def _extract(problem, mb, solver, status) -> Solution:
                     if key not in mb.incar or not solver.Value(mb.incar[key]):
                         continue
                     if k in NIGHT_BEFORE or (k >= T_BIKEBACK and owner_home_tonight):
-                        passenger_chore_units += round(
-                            _arc_distance(p.home_zip, route, a, b) * SCALE
-                        )
+                        chore_legs += 1
         sol.burdens[p.id] = {
             "total": round(solver.Value(mb.burden[p.id]) / SCALE, 1),
             "drive_miles": round(drive_units / SCALE, 1),
-            "passenger_chore_miles": round(passenger_chore_units / SCALE, 1),
             "chore_legs": chore_legs,
             "deviation": bool(solver.Value(mb.deviation[p.id])),
         }
