@@ -159,12 +159,12 @@ def test_loaner_bike_lets_a_bikeless_rider_ride():
     # Bo owns no bike; Alex brings a spare for Bo. Bo should ride Alex's loaner,
     # and the plan should say so in both itineraries.
     alex = Person(
-        id="alex", name="Alex", home_zip="55021", has_car=True,
+        id="alex", name="Alex", home_zip="55060", has_car=True,
         can_drive_morning=True, num_bikes=1, loaner_for="bo",
         return_prefs=only(BIKEBACK),
     )
     bo = Person(
-        id="bo", name="Bo", home_zip="55021", has_car=False, num_bikes=0,
+        id="bo", name="Bo", home_zip="55060", has_car=False, num_bikes=0,
         return_prefs=only(BIKEBACK),
     )
     problem = Problem(route=ROUTE, people=[alex, bo])
@@ -172,6 +172,9 @@ def test_loaner_bike_lets_a_bikeless_rider_ride():
     assert sol.status in ("optimal", "feasible")
     bo_steps = " ".join(sol.itineraries["bo"]).lower()
     assert "loaner" in bo_steps and "alex" in bo_steps
+    alex_steps = " ".join(sol.itineraries["alex"])
+    assert "carrying 2 bikes" in alex_steps
+    assert "loaner for Bo" in alex_steps
     assert any("spare bike for Bo" in s for s in sol.itineraries["alex"])
     assert any("loaner for Bo" in move for move in sol.car_moves)
 

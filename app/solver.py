@@ -869,9 +869,11 @@ def _extract(problem, mb, solver, status) -> Solution:
                             role = "Drive your car"
                         else:
                             role = f"Ride with {mb.by_id[o.id].name}"
+                        cargo = _vehicle_bike_cargo_text(mb, solver, o.id, k, a, b)
                         steps.append(
                             f"{TRANSITION_LABELS[k]}: {role} "
-                            f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)})"
+                            f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)}; "
+                            f"{cargo})"
                         )
         if not steps:
             steps.append("Stay home — no travel needed.")
@@ -1039,3 +1041,20 @@ def _bike_cargo_label(mb, owner: Person, count: int) -> str:
     # them, avoid pretending we know exactly which individual bike is in this car.
     bike_word = "bike" if count == 1 else "bikes"
     return f"{owner.name}: {count} of {mb.total_bikes[owner.id]} {bike_word}"
+
+
+def _vehicle_bike_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) -> str:
+    """Readable bike cargo for one car leg."""
+    bikes = 0
+    bike_parts = []
+    for owner in mb.people:
+        key = (owner.id, car_owner_id, k, a, b)
+        if key not in mb.bincar:
+            continue
+        count = solver.Value(mb.bincar[key])
+        bikes += count
+        if count:
+            bike_parts.append(_bike_cargo_label(mb, owner, count))
+    if not bike_parts:
+        return "carrying no bikes"
+    return f"carrying {bikes} bike{'s' if bikes != 1 else ''}: " + ", ".join(bike_parts)
