@@ -10,11 +10,70 @@ Fixtures live in ``fixtures/*.json`` (see fixtures/README.md).
 from __future__ import annotations
 
 import argparse
+import re
 import sys
+import textwrap
 
 from app import fixtures
 from app.db import get_session, init_db
 from app.solver import solve
+
+WRAP_WIDTH = 100
+
+
+def _print_wrapped(text: str, prefix: str, continuation: str) -> None:
+    lines = textwrap.wrap(
+        text,
+        width=WRAP_WIDTH,
+        initial_indent=prefix,
+        subsequent_indent=continuation,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    if lines:
+        print("\n".join(lines))
+    else:
+        print(prefix.rstrip())
+
+
+def _split_vehicle_step(step: str) -> tuple[str, list[str]] | None:
+    """Split a personal itinerary car step into a summary + contents rows."""
+    marker = "; people:"
+    if marker not in step:
+        return None
+    summary, details = step.split(marker, 1)
+    details = "people:" + details.rstrip(")")
+    return summary + ")", details.split("; ")
+
+
+def _split_car_move(move: str) -> tuple[str, list[str]] | None:
+    """Split an aggregate car movement into a summary + contents rows."""
+    match = re.match(r"^(?P<summary>.*) \((?P<details>driver.*)\)$", move)
+    if not match:
+        return None
+    return match.group("summary"), match.group("details").split("; ")
+
+
+def _print_itinerary_step(step: str) -> None:
+    split = _split_vehicle_step(step)
+    if split is None:
+        _print_wrapped(step, "   - ", "     ")
+        return
+    summary, details = split
+    _print_wrapped(summary, "   - ", "     ")
+    for detail in details:
+        _print_wrapped(detail, "     • ", "       ")
+
+
+def _print_car_move(move: str) -> None:
+    split = _split_car_move(move)
+    if split is None:
+        _print_wrapped(move, "   * ", "     ")
+        return
+    summary, details = split
+    _print_wrapped(summary, "   * ", "     ")
+    for detail in details:
+        _print_wrapped(detail, "     • ", "       ")
 
 
 def _print_plan(fixture: dict) -> int:
@@ -35,11 +94,11 @@ def _print_plan(fixture: dict) -> int:
         ret = f" [{sol.return_outcome[p.id].value}]" if p.id in sol.return_outcome else ""
         print(f"== {p.name} ({role}){ret} ==")
         for step in sol.itineraries[p.id]:
-            print(f"   - {step}")
+            _print_itinerary_step(step)
         print()
     print("Car movements:")
     for move in sol.car_moves:
-        print(f"   * {move}")
+        _print_car_move(move)
     print(
         f"\nBurden (equivalent miles; drive + {problem.chore_leg_miles:.0f}/chore leg "
         f"+ {problem.pref_penalty_miles:.0f} if on a backup return):"
