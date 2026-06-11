@@ -67,6 +67,15 @@ def event_page(request: Request, event_id: int, error: str | None = None):
             select(Participant).where(Participant.event_id == event_id)
         ).all()
     route = get_route(ev.route_key)
+    # readable household-mates per participant (others sharing the same household)
+    household_mates: dict[int, list[str]] = {}
+    for p in people:
+        key = p.household or str(p.id)
+        mates = [
+            q.name for q in people
+            if q.id != p.id and (q.household or str(q.id)) == key
+        ]
+        household_mates[p.id] = mates
     return templates.TemplateResponse(
         request,
         "event.html",
@@ -74,6 +83,7 @@ def event_page(request: Request, event_id: int, error: str | None = None):
             "event": ev,
             "route": route,
             "people": people,
+            "household_mates": household_mates,
             "error": error,
         },
     )
@@ -85,12 +95,11 @@ def add_participant(
     name: str = Form(...),
     email: str = Form(""),
     home_zip: str = Form(...),
-    household: str = Form(""),
+    household: str = Form(""),  # id of an existing participant to share a household with
     is_rider: str | None = Form(None),
     num_bikes: int = Form(1),
-    loaner_for: str = Form(""),
+    loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
     bag_count: int = Form(0),
-    has_car: str | None = Form(None),
     car_combos: str = Form(""),
     willing_drop_car: str | None = Form(None),
     willing_drop_bikes_at_start: str | None = Form(None),
@@ -110,18 +119,37 @@ def add_participant(
             status_code=303,
         )
 
+    car_flags = [
+        willing_drop_car, willing_drop_bikes_at_start,
+        willing_drive_dropper_home, can_drive_morning, is_sag_driver,
+    ]
+    # a car is implied by entering capacity or checking any car-requiring box
+    has_car = bool(car_combos.strip()) or any(f is not None for f in car_flags)
+
     with get_session() as s:
+        # "household" is the id of an existing participant to share with; resolve
+        # to their household identifier so chains stay consistent
+        household_value = ""
+        if household:
+            try:
+                target = s.get(Participant, int(household))
+            except (ValueError, TypeError):
+                target = None
+            if target is not None and target.event_id == event_id:
+                household_value = target.household or str(target.id)
+        loaner_ids = ",".join(b for b in loaner_for if b)
+
         p = Participant(
             event_id=event_id,
             name=name,
             email=email,
             home_zip=geo.normalize_zip(home_zip),
-            household=household,
+            household=household_value,
             is_rider=_checkbox(is_rider),
             num_bikes=num_bikes,
-            loaner_for=loaner_for,
+            loaner_for=loaner_ids,
             bag_count=bag_count,
-            has_car=_checkbox(has_car),
+            has_car=has_car,
             car_combos=car_combos,
             willing_drop_car=_checkbox(willing_drop_car),
             willing_drop_bikes_at_start=_checkbox(willing_drop_bikes_at_start),

@@ -586,6 +586,80 @@ def test_fairness_can_trade_miles_for_lower_max_burden():
     assert sol.max_burden < sol0.max_burden  # ...but lightens the heaviest load
 
 
+def test_one_person_can_loan_to_multiple_riders():
+    # Avery brings spares for both Blake and Cory; both should ride Avery's bikes.
+    avery = Person(
+        id="avery", name="Avery", home_zip="55021", has_car=True,
+        car_combos=[CarCombo(people=5, bikes=4)], num_bikes=1,
+        loaner_for=["blake", "cory"], can_drive_morning=True, return_prefs=only(BIKEBACK),
+    )
+    blake = Person(id="blake", name="Blake", home_zip="55021", num_bikes=0,
+                   return_prefs=only(BIKEBACK))
+    cory = Person(id="cory", name="Cory", home_zip="55021", num_bikes=0,
+                  return_prefs=only(BIKEBACK))
+    sol = solve(Problem(route=ROUTE, people=[avery, blake, cory]))
+    assert sol.status in ("optimal", "feasible")
+    for pid in ("blake", "cory"):
+        assert any("loaner" in s.lower() and "Avery" in s for s in sol.itineraries[pid])
+
+
+def test_household_member_can_drive_the_household_car():
+    # Quinn owns the only car but rides and stays overnight, so the car sits at
+    # the start. Getting Lee home that night requires Quinn's sibling Robin to
+    # drive Quinn's car — only possible if they share a household.
+    def roster(same_household):
+        return [
+            Person(id="quinn", name="Quinn", home_zip="55021", household="fam",
+                   has_car=True, car_combos=[CarCombo(5, 2)], num_bikes=1,
+                   can_drive_morning=True, return_prefs=only(BIKEBACK)),
+            Person(id="robin", name="Robin", home_zip="55021",
+                   household="fam" if same_household else "solo", is_rider=False),
+            Person(id="lee", name="Lee", home_zip="55060", num_bikes=1,
+                   return_prefs=only(TONIGHT)),
+        ]
+    shared = solve(Problem(route=ROUTE, people=roster(True)))
+    assert shared.status in ("optimal", "feasible")
+    # Robin (the sibling, no car of her own) does the driving and bears the burden
+    assert shared.burdens["robin"]["drive_miles"] > 0
+    # without the shared household it's impossible (the car is stranded)
+    assert solve(Problem(route=ROUTE, people=roster(False))).status == "infeasible"
+
+
+def test_chore_willingness_follows_the_actual_driver():
+    # With a shared household car, the willingness gate must apply to whoever is
+    # actually driving — a non-willing household member can't ferry a non-household
+    # rider just because the car's owner opted in.
+    def model():
+        ppl = [
+            Person(id="r", name="R", home_zip="55060", num_bikes=1,
+                   return_prefs=only(TONIGHT)),
+            Person(id="a", name="A", home_zip="55021", household="fam", has_car=True,
+                   car_combos=[CarCombo(5, 2)], is_rider=False, can_drive_morning=True),
+            Person(id="b", name="B", home_zip="55021", household="fam", is_rider=False,
+                   can_drive_morning=False),  # shares the car but did NOT opt in
+        ]
+        return _Model(Problem(route=ROUTE, people=ppl))
+
+    def feasible_with(driver):
+        mb = model()
+        mb.m.Add(mb.incar["r", "a", T_MORNING, H, S] == 1)  # R rides A's car to start
+        mb.m.Add(mb.drives[driver, "a", T_MORNING, H, S] == 1)  # this person drives
+        solver = cp_model.CpSolver()
+        return solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    assert feasible_with("a")  # the willing owner may ferry R
+    assert not feasible_with("b")  # the non-willing sibling may not
+
+
+def test_has_car_is_inferred_from_car_inputs():
+    # No explicit has_car, but capacity / a car-requiring flag implies one.
+    p1 = Person(id="a", name="A", home_zip="55021", car_combos=[CarCombo(4, 2)])
+    p2 = Person(id="b", name="B", home_zip="55021", can_drive_morning=True)
+    p3 = Person(id="c", name="C", home_zip="55021")  # nothing car-related
+    assert p1.has_car and p2.has_car and not p3.has_car
+    assert p2.car_combos  # gets the default 5x2 rack
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

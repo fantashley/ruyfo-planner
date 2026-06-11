@@ -44,6 +44,19 @@ def load(name_or_path: str | Path) -> dict:
     return json.loads(_resolve_path(name_or_path).read_text())
 
 
+_CAR_FLAGS = (
+    "willing_drop_car", "willing_drop_bikes_at_start",
+    "willing_drive_dropper_home", "can_drive_morning", "is_sag_driver",
+)
+
+
+def _implies_car(p: dict) -> bool:
+    """A participant has a car if they say so, give capacity, or check a car flag."""
+    return bool(
+        p.get("has_car") or p.get("car_combos") or any(p.get(f) for f in _CAR_FLAGS)
+    )
+
+
 def _return_strings(p: dict) -> dict[str, str]:
     merged = dict(_RETURN_DEFAULTS)
     merged.update(p.get("return", {}))
@@ -64,10 +77,10 @@ def build_problem(fixture: dict) -> Problem:
                 household=p.get("household", ""),
                 is_rider=p.get("is_rider", True),
                 num_bikes=p.get("num_bikes", 1),
-                loaner_for=p.get("loaner_for", ""),  # borrower's name == their id
+                loaner_for=p.get("loaner_for", []),  # borrower name(s); str or list ok
                 bag_count=p.get("bag_count", 0),
-                has_car=p.get("has_car", False),
-                car_combos=parse_combos(p.get("car_combos", "")) if p.get("has_car") else [],
+                has_car=p.get("has_car", False),  # Person also infers from combos/flags
+                car_combos=parse_combos(p.get("car_combos", "")),
                 willing_drop_car=p.get("willing_drop_car", False),
                 willing_drop_bikes_at_start=p.get("willing_drop_bikes_at_start", False),
                 willing_drive_dropper_home=p.get("willing_drive_dropper_home", False),
@@ -130,7 +143,7 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
                 is_rider=p.get("is_rider", True),
                 num_bikes=p.get("num_bikes", 1),
                 bag_count=p.get("bag_count", 0),
-                has_car=p.get("has_car", False),
+                has_car=_implies_car(p),
                 car_combos=p.get("car_combos", ""),
                 willing_drop_car=p.get("willing_drop_car", False),
                 willing_drop_bikes_at_start=p.get("willing_drop_bikes_at_start", False),
@@ -147,12 +160,14 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
     for r in rows:
         session.refresh(r)
 
-    # resolve loaner_for (given as the borrower's name) to the borrower's id
+    # resolve loaner_for (borrower name or list of names) to comma-separated ids
     by_name = {r.name: r for r in rows}
     for p, r in zip(fixture["participants"], rows):
-        borrower = p.get("loaner_for", "")
-        if borrower and borrower in by_name:
-            r.loaner_for = str(by_name[borrower].id)
+        raw = p.get("loaner_for", [])
+        names = [raw] if isinstance(raw, str) else list(raw)
+        ids = [str(by_name[n].id) for n in names if n and n in by_name]
+        if ids:
+            r.loaner_for = ",".join(ids)
             session.add(r)
     session.commit()
     return ev

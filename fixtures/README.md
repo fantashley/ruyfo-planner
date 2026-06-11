@@ -39,13 +39,13 @@ sensible default):
 | `name` | string | — | **required**, must be unique in the roster (used as the key) |
 | `email` | string | `""` | optional |
 | `home_zip` | string | — | **required** 5-digit ZIP |
-| `household` | string | `""` (own) | share a label to travel together for free |
+| `household` | string | `""` (own) | share a label so they travel together for free **and can drive each other's cars** |
 | `is_rider` | bool | `true` | `false` = a non-riding supporter/driver |
-| `num_bikes` | int | `1` | bikes this person **owns and brings**; `0` if they only ride a loaner |
-| `loaner_for` | string | `""` | the **name** of the rider you bring a spare bike for |
+| `num_bikes` | int | `1` | bikes this person **owns and rides** (NOT loaners they bring); `0` if they only ride a borrowed loaner |
+| `loaner_for` | string or list | `[]` | the **name(s)** of riders you bring a spare bike for (e.g. `"Cory"` or `["Cory", "Dana"]`) |
 | `bag_count` | int | `0` | overnight bags to get to the hotel |
-| `has_car` | bool | `false` | do they have a car to use? |
-| `car_combos` | string | `"5x2"` if `has_car` | capacity options, `people x bikes`, comma-separated (e.g. `"5x2, 2x4"`) |
+| `has_car` | bool | inferred | optional — a car is assumed if `car_combos` or any car-requiring flag is set |
+| `car_combos` | string | `"5x2"` if a car | capacity options, `people x bikes`, comma-separated (e.g. `"5x2, 2x4"`) |
 | `willing_drop_car` | bool | `false` | leave their car at the finish the night before |
 | `willing_drop_bikes_at_start` | bool | `false` | shuttle bikes to the start the night before |
 | `willing_drive_dropper_home` | bool | `false` | drive a car-dropper home the night before |
@@ -54,6 +54,8 @@ sensible default):
 | `return` | object | `tonight=preferred, others=acceptable` | per-option preference, each `"preferred"` / `"acceptable"` / `"unwilling"`: `{"tonight": …, "bikeback": …, "ridehome": …}` |
 
 Notes:
-- A **loaner**: the lender sets `loaner_for` to the borrower's name; the borrower
-  sets `num_bikes: 0`. The bike returns to the lender's home.
+- A **loaner**: the lender sets `loaner_for` to the borrower's name (or a list of
+  names); each borrower sets `num_bikes: 0`. The bikes return to the lender's home.
+- **Household**: members share a home and may drive each other's cars (so a car can
+  move even while its owner is biking). Burden for a leg goes to whoever drives.
 - Keys omitted from `return` fall back to the defaults above.

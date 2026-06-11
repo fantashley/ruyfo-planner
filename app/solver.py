@@ -63,9 +63,9 @@ class Person:
     home_zip: str
     household: str = ""  # blank => own household (id used)
     is_rider: bool = True
-    num_bikes: int = 1  # bikes this person OWNS and brings (0 for a bike-less supporter
-    #                     or a rider who only borrows a loaner)
-    loaner_for: str = ""  # participant id this person brings a spare/loaner bike for
+    num_bikes: int = 1  # bikes this person OWNS and rides (NOT counting loaners they
+    #                     bring for others); 0 for a supporter or a loaner-only rider
+    loaner_for: list[str] = field(default_factory=list)  # ids this person lends a bike to
     bag_count: int = 0  # overnight bags to get to the hotel (finish)
 
     # car
@@ -85,6 +85,20 @@ class Person:
     def __post_init__(self) -> None:
         if not self.household:
             self.household = self.id
+        # a bare string loaner is accepted and treated as a one-element list
+        if isinstance(self.loaner_for, str):
+            self.loaner_for = [self.loaner_for] if self.loaner_for else []
+        # "has a car" is implied by anything that needs one, so callers don't have
+        # to set it explicitly (the web form drops the redundant checkbox)
+        if not self.has_car and (
+            self.car_combos
+            or self.willing_drop_car
+            or self.willing_drop_bikes_at_start
+            or self.willing_drive_dropper_home
+            or self.can_drive_morning
+            or self.is_sag_driver
+        ):
+            self.has_car = True
         if self.has_car and not self.car_combos:
             # sensible default: a 5-seat car with a 2-bike rack
             self.car_combos = [CarCombo(people=5, bikes=2)]
@@ -216,8 +230,9 @@ class _Model:
         """
         self.loaners = []  # (lender_id, borrower_id)
         for p in self.people:
-            if p.loaner_for and p.loaner_for in self.by_id:
-                self.loaners.append((p.id, p.loaner_for))
+            for borrower_id in p.loaner_for:
+                if borrower_id in self.by_id and borrower_id != p.id:
+                    self.loaners.append((p.id, borrower_id))
 
         # total bikes each person brings = their own + loaners they provide
         self.total_bikes = {p.id: p.num_bikes for p in self.people}
@@ -353,17 +368,38 @@ class _Model:
                     )
 
         # ---- driver presence + capacity (people) -------------------------- #
+        # self.drives[(driver, owner, k, a, b)] -> the bool of "driver drives owner's
+        # car on this leg". A car moves iff exactly one of its eligible drivers
+        # (the owner, or — for a shared household car — any household member who
+        # could be aboard) is driving. Used for burden attribution and the driver
+        # label. Single-person households alias the cmove var (no extra variable).
+        self.drives = {}
         for o in self.owners:
+            household_ids = [
+                hm.id for hm in self.people if hm.household == o.household
+            ]
+            shared = len(household_ids) > 1
             for k in range(NK):
                 for (a, b) in ALLOWED_ARCS[k]:
                     move = self.cmove[o.id, k, a, b]
-                    # owner drives their own car whenever it moves; if the owner
-                    # can't be in it on this arc (a rider can't drive during the
-                    # ride) then the car simply can't make that move
-                    if (o.id, o.id, k, a, b) in self.incar:
-                        m.Add(self.incar[o.id, o.id, k, a, b] == move)
+                    if not shared:
+                        # owner is the only possible driver of their own car
+                        if (o.id, o.id, k, a, b) in self.incar:
+                            m.Add(self.incar[o.id, o.id, k, a, b] == move)
+                            self.drives[o.id, o.id, k, a, b] = move
+                        else:
+                            m.Add(move == 0)
                     else:
-                        m.Add(move == 0)
+                        # any household member who can be in the car may drive it
+                        dvs = []
+                        for hm_id in household_ids:
+                            if (hm_id, o.id, k, a, b) not in self.incar:
+                                continue
+                            dv = m.NewBoolVar(f"drv_{hm_id}_{o.id}_{k}_{a}{b}")
+                            m.Add(dv <= self.incar[hm_id, o.id, k, a, b])
+                            self.drives[hm_id, o.id, k, a, b] = dv
+                            dvs.append(dv)
+                        m.Add(move == sum(dvs))  # exactly one driver iff it moves
                     riders_in = [
                         self.incar[p.id, o.id, k, a, b]
                         for p in self.people
@@ -406,33 +442,43 @@ class _Model:
     def _apply_gates(self):
         m = self.m
         for o in self.owners:
+            household = [hm for hm in self.people if hm.household == o.household]
+
+            def willing_drivers(k, a, b, attr):
+                # the drives bools for household members who opted into this chore
+                return [
+                    self.drives[hm.id, o.id, k, a, b]
+                    for hm in household
+                    if getattr(hm, attr) and (hm.id, o.id, k, a, b) in self.drives
+                ]
+
             # leaving a car at the finish overnight (parked there when morning
-            # begins) requires willingness to drop it
+            # begins) requires the owner's willingness — it's the owner's car
             if not o.willing_drop_car:
                 m.Add(self.cat[o.id, T_MORNING, F] == 0)
-            # night-before bike shuttle to the start — any night-before H->S leg
-            if not o.willing_drop_bikes_at_start:
-                for k in NIGHT_BEFORE:
-                    if (o.id, k, H, S) in self.cmove:
-                        m.Add(self.cmove[o.id, k, H, S] == 0)
-            # night-before: carrying *droppers* home (any F->H night-before leg).
-            # The willingness flag only governs giving rides to people outside your
-            # own household — family sharing the car always travels together.
-            if not o.willing_drive_dropper_home:
+            # these are *driver* chores: with shared household cars, whoever is
+            # actually driving must have opted in (not just the car's owner).
+            for k in NIGHT_BEFORE:
+                # night-before bike shuttle to the start — any night-before H->S leg
+                if (o.id, k, H, S) in self.cmove:
+                    m.Add(
+                        self.cmove[o.id, k, H, S]
+                        <= sum(willing_drivers(k, H, S, "willing_drop_bikes_at_start"))
+                    )
+                # carrying *droppers* home (F->H). Household members travelling
+                # together are exempt; a non-household rider needs a willing driver.
+                ok = willing_drivers(k, F, H, "willing_drive_dropper_home")
                 for p in self.people:
-                    if p.household == o.household:
-                        continue
-                    for k in NIGHT_BEFORE:
-                        if (p.id, o.id, k, F, H) in self.incar:
-                            m.Add(self.incar[p.id, o.id, k, F, H] == 0)
-            # morning: carrying *others* to the start (household members exempt)
-            if not o.can_drive_morning:
-                for p in self.people:
-                    if (
-                        p.household != o.household
-                        and (p.id, o.id, T_MORNING, H, S) in self.incar
-                    ):
-                        m.Add(self.incar[p.id, o.id, T_MORNING, H, S] == 0)
+                    if p.household != o.household and (p.id, o.id, k, F, H) in self.incar:
+                        m.Add(self.incar[p.id, o.id, k, F, H] <= sum(ok))
+            # morning: carrying *non-household* others to the start
+            ok = willing_drivers(T_MORNING, H, S, "can_drive_morning")
+            for p in self.people:
+                if (
+                    p.household != o.household
+                    and (p.id, o.id, T_MORNING, H, S) in self.incar
+                ):
+                    m.Add(self.incar[p.id, o.id, T_MORNING, H, S] <= sum(ok))
 
     def _build_bikes(self):
         m = self.m
@@ -725,27 +771,26 @@ class _Model:
         self.burden = {}
         for p in self.people:
             terms = [pen * self.deviation[p.id]]
-            if p.has_car:
-                ht = self.home_tonight[p.id]
-                for k in range(NK):
-                    for (a, b) in ALLOWED_ARCS[k]:
-                        if (p.id, k, a, b) not in self.cmove:
-                            continue
-                        mv = self.cmove[p.id, k, a, b]
-                        base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
-                        if base:
-                            terms.append(base * mv)
-                        if (k in NIGHT_BEFORE or self._is_sag_drive(p.id)) and chore:
-                            terms.append(chore * mv)
-                        elif k >= T_BIKEBACK and chore:
-                            # a next-morning leg is a chore only if they were home
-                            # tonight (had to go back out); an overnighter driving
-                            # home is just their own return
-                            both = m.NewBoolVar(f"chore_{p.id}_{k}_{a}{b}")
-                            m.Add(both <= mv)
-                            m.Add(both <= ht)
-                            m.Add(both >= mv + ht - 1)
-                            terms.append(chore * both)
+            ht = self.home_tonight[p.id]
+            # legs this person actually drives — their own car or a household car
+            for (driver_id, owner_id, k, a, b), dv in self.drives.items():
+                if driver_id != p.id:
+                    continue
+                owner = self.by_id[owner_id]
+                base = round(_arc_distance(owner.home_zip, self.route, a, b) * SCALE)
+                if base:
+                    terms.append(base * dv)
+                if (k in NIGHT_BEFORE or self._is_sag_drive(owner_id)) and chore:
+                    terms.append(chore * dv)
+                elif k >= T_BIKEBACK and chore:
+                    # a next-morning leg is a chore only if the driver was home
+                    # tonight (had to go back out); an overnighter driving home is
+                    # just their own return
+                    both = m.NewBoolVar(f"chore_{p.id}_{owner_id}_{k}_{a}{b}")
+                    m.Add(both <= dv)
+                    m.Add(both <= ht)
+                    m.Add(both >= dv + ht - 1)
+                    terms.append(chore * both)
             for o in self.owners:
                 if o.id == p.id:
                     continue
@@ -822,7 +867,7 @@ def _diagnose_infeasible(problem: Problem) -> str:
             f"{only_tonight[0].name} has marked every return option as unwilling"
         )
     # a rider with no bike of their own and no loaner can only cross on the SAG
-    borrowers = {p.loaner_for for p in problem.people if p.loaner_for}
+    borrowers = {b for p in problem.people for b in p.loaner_for}
     bikeless = [
         p for p in riders if p.num_bikes <= 0 and p.id not in borrowers
     ]
@@ -884,19 +929,18 @@ def _extract(problem, mb, solver, status) -> Solution:
         drive_units = 0
         chore_legs = 0
         home_tonight = bool(solver.Value(mb.home_tonight[p.id]))
-        if p.has_car:
-            for k in range(NK):
-                for (a, b) in ALLOWED_ARCS[k]:
-                    key = (p.id, k, a, b)
-                    if key not in mb.cmove or not solver.Value(mb.cmove[key]):
-                        continue
-                    drive_units += round(_arc_distance(p.home_zip, route, a, b) * SCALE)
-                    if (
-                        k in NIGHT_BEFORE
-                        or mb._is_sag_drive(p.id)
-                        or (k >= T_BIKEBACK and home_tonight)
-                    ):
-                        chore_legs += 1
+        # legs this person actually drives (own car or a household car)
+        for (driver_id, owner_id, k, a, b), dv in mb.drives.items():
+            if driver_id != p.id or not solver.Value(dv):
+                continue
+            owner = mb.by_id[owner_id]
+            drive_units += round(_arc_distance(owner.home_zip, route, a, b) * SCALE)
+            if (
+                k in NIGHT_BEFORE
+                or mb._is_sag_drive(owner_id)
+                or (k >= T_BIKEBACK and home_tonight)
+            ):
+                chore_legs += 1
         for o in mb.owners:
             if o.id == p.id:
                 continue
@@ -954,10 +998,14 @@ def _extract(problem, mb, solver, status) -> Solution:
                         # filter on *this person's* own travel, not the driver's
                         if _arc_distance(p.home_zip, route, a, b) < ZERO_MI:
                             continue  # 0-mile no-op (they live at this endpoint)
-                        if o.id == p.id:
-                            role = "Drive your car"
+                        driver_id = _leg_driver_id(mb, solver, o.id, k, a, b)
+                        if driver_id == p.id:
+                            role = (
+                                "Drive your car" if o.id == p.id
+                                else f"Drive {mb.by_id[o.id].name}'s car"
+                            )
                         else:
-                            role = f"Ride with {mb.by_id[o.id].name}"
+                            role = f"Ride with {mb.by_id[driver_id].name}"
                         contents = _vehicle_contents_text(mb, solver, o.id, k, a, b)
                         steps.append(
                             f"{TRANSITION_LABELS[k]}: {role} "
@@ -973,10 +1021,11 @@ def _extract(problem, mb, solver, status) -> Solution:
         for k in range(NK):
             for (a, b) in ALLOWED_ARCS[k]:
                 if solver.Value(mb.cmove[o.id, k, a, b]):
+                    driver_id = _leg_driver_id(mb, solver, o.id, k, a, b)
                     passengers = [
                         mb.by_id[p.id].name
                         for p in problem.people
-                        if p.id != o.id
+                        if p.id != driver_id
                         and (p.id, o.id, k, a, b) in mb.incar
                         and solver.Value(mb.incar[p.id, o.id, k, a, b])
                     ]
@@ -1001,7 +1050,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                         and bags == 0
                     ):
                         continue
-                    who = f" + {', '.join(passengers)}" if passengers else ""
+                    who = f", with {', '.join(passengers)}" if passengers else ""
                     if bike_parts:
                         biketxt = f"{bikes} bike{'s' if bikes != 1 else ''}: "
                         biketxt += ", ".join(bike_parts)
@@ -1011,7 +1060,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                     sol.car_moves.append(
                         f"{TRANSITION_LABELS[k]}: {o.name}'s car "
                         f"{_loc_name(problem, o, a)} → {_loc_name(problem, o, b)} "
-                        f"(driver{who}; {biketxt}{bagtxt})"
+                        f"(driven by {mb.by_id[driver_id].name}{who}; {biketxt}{bagtxt})"
                     )
 
     # Bike hand-offs (presentation only): when a bike rides in someone else's
@@ -1149,13 +1198,23 @@ def _vehicle_bike_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: s
     return f"bikes: {bikes} bike{'s' if bikes != 1 else ''}: " + ", ".join(bike_parts)
 
 
+def _leg_driver_id(mb, solver, owner_id: str, k: int, a: str, b: str) -> str:
+    """Who actually drives ``owner_id``'s car on this leg (a household member may)."""
+    for hm in mb.people:
+        dv = mb.drives.get((hm.id, owner_id, k, a, b))
+        if dv is not None and solver.Value(dv):
+            return hm.id
+    return owner_id
+
+
 def _vehicle_people_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) -> str:
     """Readable people list for one car leg."""
-    driver = mb.by_id[car_owner_id].name
+    driver_id = _leg_driver_id(mb, solver, car_owner_id, k, a, b)
+    driver = mb.by_id[driver_id].name
     riders = [
         p.name
         for p in mb.people
-        if p.id != car_owner_id
+        if p.id != driver_id
         and (p.id, car_owner_id, k, a, b) in mb.incar
         and solver.Value(mb.incar[p.id, car_owner_id, k, a, b])
     ]

@@ -19,7 +19,7 @@
       <tbody>
       {% for p in people %}
         <tr>
-          <td>{{ p.name }}{% if p.household %}<br><span class="muted">{{ p.household }}</span>{% endif %}</td>
+          <td>{{ p.name }}{% if household_mates[p.id] %}<br><span class="muted">🏠 with {{ household_mates[p.id]|join(", ") }}</span>{% endif %}</td>
           <td>{{ p.home_zip }}</td>
           <td>
             {% if p.is_rider %}rider{% else %}supporter{% endif %}
@@ -49,26 +49,32 @@
         <label>Name <input name="name" required></label>
         <label>Email <input name="email" type="email"></label>
         <label>Home ZIP <input name="home_zip" pattern="[0-9]{5}" required></label>
-        <label>Household
-          <input name="household" placeholder="(optional, share with family)">
+        <label>Same household as
+          <select name="household">
+            <option value="">— just me —</option>
+            {% for q in people %}
+            <option value="{{ q.id }}">{{ q.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="muted">Pick someone already added to share a home/cars with them.</small>
         </label>
       </div>
 
       <fieldset>
         <legend>Riding &amp; gear</legend>
         <label class="check"><input type="checkbox" name="is_rider" checked> I'm riding the route</label>
-        <label>Bikes I own &amp; bring
+        <label>Bikes I'll ride
           <input name="num_bikes" type="number" min="0" value="1">
-          <small class="muted">Set 0 if you'll only ride a borrowed loaner.</small>
+          <small class="muted">Your own bike(s) only — don't count loaners you bring
+          for others (add those below). Set 0 if you'll ride a borrowed loaner.</small>
         </label>
-        <label>I'm bringing a spare/loaner bike for
-          <select name="loaner_for">
-            <option value="">— nobody —</option>
+        <label>I'm bringing spare/loaner bikes for
+          <select name="loaner_for" multiple size="3">
             {% for q in people %}
             <option value="{{ q.id }}">{{ q.name }}</option>
             {% endfor %}
           </select>
-          <small class="muted">Add the borrower first, then pick them here.</small>
+          <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers first.</small>
         </label>
         <label>Overnight bags to get to the hotel
           <input name="bag_count" type="number" min="0" value="0">
@@ -76,11 +82,10 @@
       </fieldset>
 
       <fieldset>
-        <legend>Car</legend>
-        <label class="check"><input type="checkbox" name="has_car"> I have a car to use</label>
+        <legend>Car <small class="muted">(fill in if you have one to use for logistics)</small></legend>
         <label>Capacity combos
           <input name="car_combos" placeholder="5x2, 2x4">
-          <small class="muted">people × bikes, comma-separated. Blank = 5×2.</small>
+          <small class="muted">people × bikes, comma-separated. Leave blank if no car; default 5×2.</small>
         </label>
         <label class="check"><input type="checkbox" name="can_drive_morning">
           Can drive people to the start the morning of</label>

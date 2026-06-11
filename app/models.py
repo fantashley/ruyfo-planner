@@ -23,11 +23,11 @@ class Participant(SQLModel, table=True):
     name: str
     email: str = ""
     home_zip: str
-    household: str = ""
+    household: str = ""  # the participant id whose household this person shares ("" = own)
 
     is_rider: bool = True
     num_bikes: int = 1
-    loaner_for: str = ""  # participant id this person brings a spare bike for
+    loaner_for: str = ""  # comma-separated participant ids this person lends a bike to
     bag_count: int = 0  # overnight bags to get to the hotel
 
     has_car: bool = False
@@ -74,10 +74,10 @@ def to_person(p: Participant) -> Person:
         household=p.household or str(p.id),
         is_rider=p.is_rider,
         num_bikes=p.num_bikes,
-        loaner_for=p.loaner_for,
+        loaner_for=[x.strip() for x in p.loaner_for.split(",") if x.strip()],
         bag_count=p.bag_count,
         has_car=p.has_car,
-        car_combos=parse_combos(p.car_combos) if p.has_car else [],
+        car_combos=parse_combos(p.car_combos),  # Person infers has_car from these
         willing_drop_car=p.willing_drop_car,
         willing_drop_bikes_at_start=p.willing_drop_bikes_at_start,
         willing_drive_dropper_home=p.willing_drive_dropper_home,
