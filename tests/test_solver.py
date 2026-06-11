@@ -407,6 +407,7 @@ def test_no_return_handoff_note_for_pre_ride_bike_shuttle():
     bob = Person(
         id="bob", name="Bob", home_zip="55060", is_rider=False, has_car=True,
         car_combos=[CarCombo(people=4, bikes=2)], can_drive_morning=True,
+        willing_drop_car=True,
     )
     problem = Problem(route=ROUTE, people=[ann, bob])
     mb = _Model(problem)
@@ -422,7 +423,7 @@ def test_no_return_handoff_note_for_pre_ride_bike_shuttle():
 
 
 def test_cargo_prefers_direct_leg_when_car_route_is_fixed():
-    # If a car is already making an unrelated round trip, cargo should not tag
+    # If a car is already making a permitted round trip, cargo should not tag
     # along unless it helps. The bike can wait for the direct morning leg.
     ann = Person(
         id="ann", name="Ann", home_zip="55060", has_car=False,
@@ -431,6 +432,7 @@ def test_cargo_prefers_direct_leg_when_car_route_is_fixed():
     bob = Person(
         id="bob", name="Bob", home_zip="55060", is_rider=False, has_car=True,
         car_combos=[CarCombo(people=4, bikes=2)], can_drive_morning=True,
+        willing_drop_car=True,
         return_prefs=only(RIDEHOME),
     )
     mb = _Model(Problem(route=ROUTE, people=[ann, bob]))
@@ -603,25 +605,26 @@ def test_one_person_can_loan_to_multiple_riders():
         assert any("loaner" in s.lower() and "Avery" in s for s in sol.itineraries[pid])
 
 
-def test_household_member_can_drive_the_household_car():
-    # Quinn owns the only car but rides and stays overnight, so the car sits at
-    # the start. Getting Lee home that night requires Quinn's sibling Robin to
-    # drive Quinn's car — only possible if they share a household.
-    def roster(same_household):
+def test_household_members_can_pool_cars_when_opted_in():
+    # Quinn owns the only car but rides and stays overnight, so the car sits at the
+    # start. Getting Lee home that night needs Quinn's household-mate Robin to drive
+    # Quinn's car — allowed only when they BOTH opt into car pooling.
+    def roster(pool):
         return [
             Person(id="quinn", name="Quinn", home_zip="55021", household="fam",
                    has_car=True, car_combos=[CarCombo(5, 2)], num_bikes=1,
-                   can_drive_morning=True, return_prefs=only(BIKEBACK)),
-            Person(id="robin", name="Robin", home_zip="55021",
-                   household="fam" if same_household else "solo", is_rider=False),
+                   can_drive_morning=True, share_household_car=pool,
+                   return_prefs=only(BIKEBACK)),
+            Person(id="robin", name="Robin", home_zip="55021", household="fam",
+                   is_rider=False, share_household_car=pool),
             Person(id="lee", name="Lee", home_zip="55060", num_bikes=1,
                    return_prefs=only(TONIGHT)),
         ]
     shared = solve(Problem(route=ROUTE, people=roster(True)))
     assert shared.status in ("optimal", "feasible")
-    # Robin (the sibling, no car of her own) does the driving and bears the burden
+    # Robin (no car of her own) does the driving and bears the burden
     assert shared.burdens["robin"]["drive_miles"] > 0
-    # without the shared household it's impossible (the car is stranded)
+    # not opting in keeps pooling off (the default), so the car is stranded
     assert solve(Problem(route=ROUTE, people=roster(False))).status == "infeasible"
 
 
@@ -634,10 +637,11 @@ def test_chore_willingness_follows_the_actual_driver():
             Person(id="r", name="R", home_zip="55060", num_bikes=1,
                    return_prefs=only(TONIGHT)),
             Person(id="a", name="A", home_zip="55021", household="fam", has_car=True,
-                   car_combos=[CarCombo(5, 2)], is_rider=False, can_drive_morning=True),
+                   car_combos=[CarCombo(5, 2)], is_rider=False, can_drive_morning=True,
+                   share_household_car=True),
             Person(id="b", name="B", home_zip="55021", household="fam", is_rider=False,
-                   can_drive_morning=False),  # shares the car but did NOT opt in
-        ]
+                   can_drive_morning=False, share_household_car=True),  # pools the car
+        ]                                                                # but won't ferry
         return _Model(Problem(route=ROUTE, people=ppl))
 
     def feasible_with(driver):
@@ -649,6 +653,31 @@ def test_chore_willingness_follows_the_actual_driver():
 
     assert feasible_with("a")  # the willing owner may ferry R
     assert not feasible_with("b")  # the non-willing sibling may not
+
+
+def test_finish_drop_willingness_follows_the_actual_driver():
+    # A night-before home->finish leg is a finish-drop chore. With a shared
+    # household car, the household member who actually drives must be willing to
+    # drop a car at the finish; the owner's willingness is not transferable.
+    def model():
+        ppl = [
+            Person(id="a", name="A", home_zip="55021", household="fam", has_car=True,
+                   car_combos=[CarCombo(5, 2)], is_rider=False,
+                   willing_drop_car=True, share_household_car=True),
+            Person(id="b", name="B", home_zip="55021", household="fam", is_rider=False,
+                   willing_drop_car=False, share_household_car=True),
+        ]
+        return _Model(Problem(route=ROUTE, people=ppl))
+
+    def feasible_with(driver):
+        mb = model()
+        mb.m.Add(mb.cmove["a", 0, H, F] == 1)
+        mb.m.Add(mb.drives[driver, "a", 0, H, F] == 1)
+        solver = cp_model.CpSolver()
+        return solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    assert feasible_with("a")
+    assert not feasible_with("b")
 
 
 def test_has_car_is_inferred_from_car_inputs():

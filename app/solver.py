@@ -78,6 +78,7 @@ class Person:
     willing_drive_dropper_home: bool = False  # night-before ride home for droppers
     can_drive_morning: bool = False  # ferry others to the start the morning of
     is_sag_driver: bool = False  # drives the SAG wagon (route sweep)
+    share_household_car: bool = False  # opt in to pooling cars with the household
 
     # return preferences: every option marked preferred / acceptable / unwilling
     return_prefs: dict[ReturnOption, Pref] = field(default_factory=dict)
@@ -369,16 +370,22 @@ class _Model:
 
         # ---- driver presence + capacity (people) -------------------------- #
         # self.drives[(driver, owner, k, a, b)] -> the bool of "driver drives owner's
-        # car on this leg". A car moves iff exactly one of its eligible drivers
-        # (the owner, or — for a shared household car — any household member who
-        # could be aboard) is driving. Used for burden attribution and the driver
-        # label. Single-person households alias the cmove var (no extra variable).
+        # car on this leg". A car moves iff exactly one of its eligible drivers is
+        # driving. By default the only eligible driver is the owner; two household
+        # members pool cars only if *both* opt in (`share_household_car`). Used for
+        # burden attribution and the driver label. The owner-only case aliases the
+        # cmove var (no extra variable).
         self.drives = {}
         for o in self.owners:
-            household_ids = [
-                hm.id for hm in self.people if hm.household == o.household
+            eligible_drivers = [o.id] + [
+                hm.id
+                for hm in self.people
+                if hm.id != o.id
+                and hm.household == o.household
+                and hm.share_household_car
+                and o.share_household_car
             ]
-            shared = len(household_ids) > 1
+            shared = len(eligible_drivers) > 1
             for k in range(NK):
                 for (a, b) in ALLOWED_ARCS[k]:
                     move = self.cmove[o.id, k, a, b]
@@ -390,9 +397,9 @@ class _Model:
                         else:
                             m.Add(move == 0)
                     else:
-                        # any household member who can be in the car may drive it
+                        # any opted-in household member who can be aboard may drive
                         dvs = []
-                        for hm_id in household_ids:
+                        for hm_id in eligible_drivers:
                             if (hm_id, o.id, k, a, b) not in self.incar:
                                 continue
                             dv = m.NewBoolVar(f"drv_{hm_id}_{o.id}_{k}_{a}{b}")
@@ -444,12 +451,13 @@ class _Model:
         for o in self.owners:
             household = [hm for hm in self.people if hm.household == o.household]
 
-            def willing_drivers(k, a, b, attr):
+            def willing_drivers(k, a, b, *attrs):
                 # the drives bools for household members who opted into this chore
                 return [
                     self.drives[hm.id, o.id, k, a, b]
                     for hm in household
-                    if getattr(hm, attr) and (hm.id, o.id, k, a, b) in self.drives
+                    if any(getattr(hm, attr) for attr in attrs)
+                    and (hm.id, o.id, k, a, b) in self.drives
                 ]
 
             # leaving a car at the finish overnight (parked there when morning
@@ -459,6 +467,22 @@ class _Model:
             # these are *driver* chores: with shared household cars, whoever is
             # actually driving must have opted in (not just the car's owner).
             for k in NIGHT_BEFORE:
+                # night-before finish-bound staging — the actual driver must be
+                # willing either to drop a car at the finish or retrieve a dropper.
+                for a in (H, S):
+                    if (o.id, k, a, F) in self.cmove:
+                        m.Add(
+                            self.cmove[o.id, k, a, F]
+                            <= sum(
+                                willing_drivers(
+                                    k,
+                                    a,
+                                    F,
+                                    "willing_drop_car",
+                                    "willing_drive_dropper_home",
+                                )
+                            )
+                        )
                 # night-before bike shuttle to the start — any night-before H->S leg
                 if (o.id, k, H, S) in self.cmove:
                     m.Add(

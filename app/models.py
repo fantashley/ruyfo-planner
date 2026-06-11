@@ -38,6 +38,7 @@ class Participant(SQLModel, table=True):
     willing_drive_dropper_home: bool = False
     can_drive_morning: bool = False
     is_sag_driver: bool = False
+    share_household_car: bool = False
 
     pref_tonight: str = Pref.PREFERRED.value
     pref_bikeback: str = Pref.ACCEPTABLE.value
@@ -83,6 +84,7 @@ def to_person(p: Participant) -> Person:
         willing_drive_dropper_home=p.willing_drive_dropper_home,
         can_drive_morning=p.can_drive_morning,
         is_sag_driver=p.is_sag_driver,
+        share_household_car=p.share_household_car,
         return_prefs={
             ReturnOption.DRIVE_HOME_TONIGHT: Pref(p.pref_tonight),
             ReturnOption.HOTEL_BIKE_BACK: Pref(p.pref_bikeback),

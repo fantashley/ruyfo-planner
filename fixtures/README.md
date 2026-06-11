@@ -39,7 +39,7 @@ sensible default):
 | `name` | string | — | **required**, must be unique in the roster (used as the key) |
 | `email` | string | `""` | optional |
 | `home_zip` | string | — | **required** 5-digit ZIP |
-| `household` | string | `""` (own) | share a label so they travel together for free **and can drive each other's cars** |
+| `household` | string | `""` (own) | share a label so they travel together for free (car pooling is separate — see `share_household_car`) |
 | `is_rider` | bool | `true` | `false` = a non-riding supporter/driver |
 | `num_bikes` | int | `1` | bikes this person **owns and rides** (NOT loaners they bring); `0` if they only ride a borrowed loaner |
 | `loaner_for` | string or list | `[]` | the **name(s)** of riders you bring a spare bike for (e.g. `"Cory"` or `["Cory", "Dana"]`) |
@@ -51,11 +51,13 @@ sensible default):
 | `willing_drive_dropper_home` | bool | `false` | drive a car-dropper home the night before |
 | `can_drive_morning` | bool | `false` | drive others to the start the morning of |
 | `is_sag_driver` | bool | `false` | drives the SAG wagon (only meaningful if `has_sag`) |
+| `share_household_car` | bool | `false` | opt in to pooling cars within the household — two members can drive each other's cars only if **both** set this |
 | `return` | object | `tonight=preferred, others=acceptable` | per-option preference, each `"preferred"` / `"acceptable"` / `"unwilling"`: `{"tonight": …, "bikeback": …, "ridehome": …}` |
 
 Notes:
 - A **loaner**: the lender sets `loaner_for` to the borrower's name (or a list of
   names); each borrower sets `num_bikes: 0`. The bikes return to the lender's home.
-- **Household**: members share a home and may drive each other's cars (so a car can
-  move even while its owner is biking). Burden for a leg goes to whoever drives.
+- **Household**: members share a home and travel together for free. They may also
+  drive each other's cars (so a car can move while its owner is biking) — but only
+  if both opt in via `share_household_car`. Burden for a leg goes to whoever drives.
 - Keys omitted from `return` fall back to the defaults above.
