@@ -2,8 +2,10 @@ from ortools.sat.python import cp_model
 
 from app.events import ROUTES
 from app.solver import (
+    ALLOWED_ARCS,
     F,
     H,
+    NIGHT_BEFORE,
     S,
     CarCombo,
     Person,
@@ -13,6 +15,7 @@ from app.solver import (
     T_BIKEBACK,
     T_HOME_TONIGHT,
     T_MORNING,
+    T_RIDE,
     _Model,
     _extract,
     solve,
@@ -211,16 +214,25 @@ def test_overnight_bag_reaches_hotel_via_sag():
     assert "overnight bags: 1 bag: Ann: 1 bag" in sage_steps
 
 
-def test_overnight_bag_without_finish_bound_vehicle_is_infeasible():
-    # Ann stays overnight with a bag, but her only car goes to the start (she
-    # rides), there's no SAG and no car dropped at the finish — the bag is stuck.
+def test_bikeback_rider_can_bring_overnight_bag_home():
+    # A bike-back rider can stage an overnight bag at the hotel, use it Friday
+    # night, and carry it back to the start Saturday morning.
     ann = Person(
-        id="ann", name="Ann", home_zip="55021", has_car=True, bag_count=1,
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
         return_prefs=HOTEL_ONLY,
     )
-    sol = solve(Problem(route=ROUTE, people=[ann]))
-    assert sol.status == "infeasible"
-    assert "bag" in sol.message.lower()
+    sage = Person(
+        id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
+        can_drive_morning=True,
+    )
+    sol = solve(Problem(route=ROUTE, people=[ann, sage], has_sag=True))
+    assert sol.status in ("optimal", "feasible")
+    assert sol.return_outcome["ann"] == BIKEBACK
+    assert any(
+        "Bike back" in step and "overnight bags: 1 bag: Ann: 1 bag" in step
+        for step in sol.itineraries["ann"]
+    )
 
 
 def test_overnight_bag_with_supporter_to_the_finish_is_ok():
@@ -236,6 +248,76 @@ def test_overnight_bag_with_supporter_to_the_finish_is_ok():
     problem = Problem(route=ROUTE, people=[ann, carl])
     sol = solve(problem)
     assert sol.status in ("optimal", "feasible")
+
+
+def test_overnight_bag_stays_at_hotel_friday_night():
+    # A bag for someone staying overnight cannot be sent home Friday evening;
+    # they still need it at the hotel that night.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    sage = Person(
+        id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
+        can_drive_morning=True,
+    )
+    mb = _Model(Problem(route=ROUTE, people=[ann, sage], has_sag=True))
+    mb.m.Add(mb.home_tonight["ann"] == 0)
+    mb.m.Add(mb.gat["ann", T_HOME_TONIGHT, H] == 1)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) == cp_model.INFEASIBLE
+
+
+def test_night_before_bag_drop_must_stay_with_parked_car():
+    # A bag can be staged in a locked car, but not dropped by a car that leaves
+    # it behind before ride morning.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    bob = Person(
+        id="bob", name="Bob", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=4, bikes=2)],
+    )
+    mb = _Model(Problem(route=ROUTE, people=[ann, bob]))
+    mb.m.Add(mb.gincar["ann", "bob", 0, H, F] == 1)
+    mb.m.Add(mb.cat["bob", T_MORNING, F] == 0)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) == cp_model.INFEASIBLE
+
+
+def test_overnight_bag_prefers_morning_sag_over_mankato_drop():
+    # Even if a car is already being left in Mankato overnight, prefer bringing
+    # the bag to the start in the morning and handing it to the SAG.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=False, bag_count=1,
+        return_prefs=HOTEL_ONLY,
+    )
+    bob = Person(
+        id="bob", name="Bob", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=2, bikes=0)], willing_drop_car=True,
+        return_prefs=only(TONIGHT),
+    )
+    sage = Person(
+        id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
+        can_drive_morning=True, willing_drive_dropper_home=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, bob, sage], has_sag=True)
+    mb = _Model(problem)
+    mb.m.Add(mb.cat["bob", T_MORNING, F] == 1)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mb.gincar["ann", "sage", T_RIDE, S, F]) == 1
+    assert all(
+        solver.Value(mb.gincar["ann", owner.id, k, a, b]) == 0
+        for owner in mb.owners
+        for k in NIGHT_BEFORE
+        for (a, b) in ALLOWED_ARCS[k]
+        if b == F and ("ann", owner.id, k, a, b) in mb.gincar
+    )
 
 
 def test_everyone_sleeps_at_home_the_night_before():
@@ -416,6 +498,27 @@ def test_burden_accounting_is_consistent():
     assert sol.status in ("optimal", "feasible")
     assert sol.max_burden == max(b["total"] for b in sol.burdens.values())
     assert sol.burdens["h2"]["total"] == 0  # no car, no chores, preferred return
+
+
+def test_passenger_on_chore_leg_gets_burden_miles():
+    # Riding home from a night-before drop is still part of the logistical load,
+    # even for the passenger.
+    rider = Person(
+        id="rider", name="Rider", home_zip="55021", has_car=True,
+        willing_drop_car=True, return_prefs=only(TONIGHT),
+    )
+    helper = Person(
+        id="helper", name="Helper", home_zip="56001", is_rider=False, has_car=True,
+        willing_drive_dropper_home=True, can_drive_morning=True,
+    )
+    mb = _Model(Problem(route=ROUTE, people=[rider, helper]))
+    mb.m.Add(mb.incar["rider", "helper", 1, F, H] == 1)
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    sol = _extract(Problem(route=ROUTE, people=[rider, helper]), mb, solver, status)
+    assert sol.burdens["rider"]["passenger_chore_miles"] > 0
+    assert sol.burdens["rider"]["total"] >= sol.burdens["rider"]["passenger_chore_miles"]
 
 
 def test_sag_route_sweep_is_counted_as_burden():

@@ -34,7 +34,8 @@
       {% if sid in solution.burdens %}
         {% set b = solution.burdens[sid] %}
         <p class="muted burden">Burden: {{ "%.0f"|format(b.total) }} eq-mi
-          — drives {{ "%.0f"|format(b.drive_miles) }} mi{% if b.chore_legs %},
+          — drives {{ "%.0f"|format(b.drive_miles) }} mi{% if b.passenger_chore_miles %},
+          rides {{ "%.0f"|format(b.passenger_chore_miles) }} chore mi{% endif %}{% if b.chore_legs %},
           {{ b.chore_legs }} chore leg{{ "s" if b.chore_legs != 1 }}{% endif %}{% if b.deviation %},
           backup return{% endif %}</p>
       {% endif %}

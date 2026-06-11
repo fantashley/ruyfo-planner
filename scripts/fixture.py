@@ -100,12 +100,15 @@ def _print_plan(fixture: dict) -> int:
     for move in sol.car_moves:
         _print_car_move(move)
     print(
-        f"\nBurden (equivalent miles; drive + {problem.chore_leg_miles:.0f}/chore leg "
-        f"+ {problem.pref_penalty_miles:.0f} if on a backup return):"
+        f"\nBurden (equivalent miles; drive + passenger chore miles "
+        f"+ {problem.chore_leg_miles:.0f}/chore leg + "
+        f"{problem.pref_penalty_miles:.0f} if on a backup return):"
     )
     for p in problem.people:
         b = sol.burdens[p.id]
         flags = []
+        if b["passenger_chore_miles"]:
+            flags.append(f"rides {b['passenger_chore_miles']:.0f} chore mi")
         if b["chore_legs"]:
             flags.append(f"{b['chore_legs']} chore leg{'s' if b['chore_legs'] != 1 else ''}")
         if b["deviation"]:

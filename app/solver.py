@@ -115,6 +115,7 @@ class Problem:
     pref_penalty_miles: float = 30.0  # cost of a merely-acceptable return option
     fairness_weight: float = 0.5  # weight on the most-burdened person's load
     chore_leg_miles: float = 15.0  # equivalent miles charged per "chore" car leg
+    bag_night_before_drop_penalty_miles: float = 100.0  # prefer morning/SAG bag delivery
 
 
 # --------------------------------------------------------------------------- #
@@ -184,7 +185,7 @@ class Solution:
     itineraries: dict[str, list[str]] = field(default_factory=dict)  # person id -> steps
     car_moves: list[str] = field(default_factory=list)
     return_outcome: dict[str, ReturnOption] = field(default_factory=dict)
-    # person id -> {"total", "drive_miles", "chore_legs", "deviation"} equivalent-mile burden
+    # person id -> burden breakdown in equivalent miles
     burdens: dict[str, dict] = field(default_factory=dict)
     max_burden: float = 0.0
     message: str = ""
@@ -506,10 +507,14 @@ class _Model:
     def _build_bags(self):
         """Overnight bags: non-rideable items that ride only in cars/SAG.
 
-        A bag must reach the finish (hotel) by the evening *if* its owner stays
-        overnight, then return home. With a SAG the bag goes home->start in a
-        morning car then start->finish on the SAG; without one it needs a
-        finish-bound car (a night-before drop or a supporter driving to F).
+        A bag must reach the finish (hotel) by the evening and stay there for
+        the night *if* its owner stays overnight, then return home. With a SAG
+        the bag goes home->start in a morning car then start->finish on the SAG;
+        without one it needs a finish-bound car (a night-before drop or a
+        supporter driving to F). Before ride morning, a bag staged away from
+        home must be with a parked car; unlike bikes, bags are not assumed safe
+        to leave loose. A rider who bikes back can carry their own bag from the
+        hotel back to the start the next morning.
         """
         m = self.m
         bag_owners = [p for p in self.people if p.bag_count > 0]
@@ -525,10 +530,16 @@ class _Model:
                 m.Add(sum(self.gat[ob.id, t, l] for l in LOCS) == nb)
             m.Add(self.gat[ob.id, 0, H] == nb)  # bags start at home
             m.Add(self.gat[ob.id, NK, H] == nb)  # ... and end at home
-            # at the finish (hotel) by the evening iff staying overnight
-            if ob.is_rider and ob.id in self.home_tonight:
+            # at the finish (hotel) by the evening, and still there Friday night,
+            # iff staying overnight
+            if ob.id in self.home_tonight:
                 stay = 1 - self.home_tonight[ob.id]  # 1 == hotel overnight
                 m.Add(self.gat[ob.id, T_RIDE + 1, F] >= nb * stay)
+                m.Add(self.gat[ob.id, T_HOME_TONIGHT, F] >= nb * stay)
+            for t in range(1, T_MORNING + 1):
+                for l in (S, F):
+                    parked_cars = [self.cat[o.id, t, l] for o in self.owners]
+                    m.Add(self.gat[ob.id, t, l] <= nb * sum(parked_cars))
 
             for k in range(NK):
                 for l in LOCS:
@@ -543,6 +554,12 @@ class _Model:
                             # bags ride only a car that actually makes the move;
                             # they don't consume people/bike capacity (small)
                             m.Add(g <= nb * self.cmove[o.id, k, a, b])
+                            if k in NIGHT_BEFORE and b in (S, F):
+                                # A night-before bag staging run must leave the
+                                # bag inside a car parked at that location; do
+                                # not assume unattended bags can transfer between
+                                # cars after the carrier leaves.
+                                m.Add(g <= nb * self.cat[o.id, T_MORNING, b])
                 # bag flow conservation (cars only — bags are never pedalled)
                 for l in LOCS:
                     out = [self.gstay[ob.id, k, l]] + self._bag_moved(ob.id, k, frm=l)
@@ -561,6 +578,8 @@ class _Model:
             for o in self.owners:
                 if (ob_id, o.id, k, a, b) in self.gincar:
                     terms.append(self.gincar[ob_id, o.id, k, a, b])
+            if k == T_BIKEBACK and (a, b) == (F, S) and ob_id in self.opt_bikeback:
+                terms.append(self.by_id[ob_id].bag_count * self.opt_bikeback[ob_id])
         return terms
 
     def _build_returns_and_objective(self):
@@ -652,7 +671,17 @@ class _Model:
         cargo_terms = list(self.bincar.values()) + list(self.gincar.values())
         self.cargo_motion_total = m.NewIntVar(0, 10_000_000, "cargo_motion_total")
         m.Add(self.cargo_motion_total == sum(cargo_terms))
+        night_before_bag_drop_terms = [
+            var
+            for (ob_id, owner_id, k, a, b), var in self.gincar.items()
+            if k in NIGHT_BEFORE and b == F
+        ]
+        self.night_before_bag_drop_total = m.NewIntVar(
+            0, 10_000_000, "night_before_bag_drop_total"
+        )
+        m.Add(self.night_before_bag_drop_total == sum(night_before_bag_drop_terms))
         pen = round(self.p.pref_penalty_miles * SCALE)
+        bag_drop_pen = round(self.p.bag_night_before_drop_penalty_miles * SCALE)
 
         # ---- fairness: per-person burden + soft minimax ---------------------- #
         self._build_burdens(pen)
@@ -661,7 +690,10 @@ class _Model:
         # to keep CP-SAT coefficients integral (0.1 granularity on the weight).
         fw = round(self.p.fairness_weight * 10)
         primary_objective = (
-            10 * self.dist_total + 10 * pen * sum(pref_terms) + fw * self.max_burden
+            10 * self.dist_total
+            + 10 * pen * sum(pref_terms)
+            + 10 * bag_drop_pen * self.night_before_bag_drop_total
+            + fw * self.max_burden
         )
         self.m.Minimize(
             CARGO_TIEBREAKER_WEIGHT * primary_objective + self.cargo_motion_total
@@ -680,6 +712,7 @@ class _Model:
         """Per-person burden in scaled equivalent miles.
 
         burden = own-car driving miles
+               + passenger miles on chore legs
                + chore_leg_miles per chore leg (night-before legs; next-morning
                  legs by someone who was already home that night)
                + pref_penalty_miles if they landed on a merely-acceptable return.
@@ -710,6 +743,27 @@ class _Model:
                             m.Add(both <= ht)
                             m.Add(both >= mv + ht - 1)
                             terms.append(chore * both)
+            for o in self.owners:
+                if o.id == p.id:
+                    continue
+                owner_ht = self.home_tonight[o.id]
+                for k in range(NK):
+                    for (a, b) in ALLOWED_ARCS[k]:
+                        key = (p.id, o.id, k, a, b)
+                        if key not in self.incar:
+                            continue
+                        ride = self.incar[key]
+                        base = round(_arc_distance(p.home_zip, self.route, a, b) * SCALE)
+                        if not base:
+                            continue
+                        if k in NIGHT_BEFORE:
+                            terms.append(base * ride)
+                        elif k >= T_BIKEBACK:
+                            both = m.NewBoolVar(f"passenger_chore_{p.id}_{o.id}_{k}_{a}{b}")
+                            m.Add(both <= ride)
+                            m.Add(both <= owner_ht)
+                            m.Add(both >= ride + owner_ht - 1)
+                            terms.append(base * both)
             bvar = m.NewIntVar(0, 10_000_000, f"burden_{p.id}")
             m.Add(bvar == sum(terms))
             self.burden[p.id] = bvar
@@ -828,6 +882,7 @@ def _extract(problem, mb, solver, status) -> Solution:
     # per-person burden breakdown (mirrors _build_burdens)
     for p in problem.people:
         drive_units = 0
+        passenger_chore_units = 0
         chore_legs = 0
         home_tonight = bool(solver.Value(mb.home_tonight[p.id]))
         if p.has_car:
@@ -839,9 +894,23 @@ def _extract(problem, mb, solver, status) -> Solution:
                     drive_units += round(_arc_distance(p.home_zip, route, a, b) * SCALE)
                     if k in NIGHT_BEFORE or (k >= T_BIKEBACK and home_tonight):
                         chore_legs += 1
+        for o in mb.owners:
+            if o.id == p.id:
+                continue
+            owner_home_tonight = bool(solver.Value(mb.home_tonight[o.id]))
+            for k in range(NK):
+                for (a, b) in ALLOWED_ARCS[k]:
+                    key = (p.id, o.id, k, a, b)
+                    if key not in mb.incar or not solver.Value(mb.incar[key]):
+                        continue
+                    if k in NIGHT_BEFORE or (k >= T_BIKEBACK and owner_home_tonight):
+                        passenger_chore_units += round(
+                            _arc_distance(p.home_zip, route, a, b) * SCALE
+                        )
         sol.burdens[p.id] = {
             "total": round(solver.Value(mb.burden[p.id]) / SCALE, 1),
             "drive_miles": round(drive_units / SCALE, 1),
+            "passenger_chore_miles": round(passenger_chore_units / SCALE, 1),
             "chore_legs": chore_legs,
             "deviation": bool(solver.Value(mb.deviation[p.id])),
         }
@@ -863,9 +932,21 @@ def _extract(problem, mb, solver, status) -> Solution:
                         if owner_id != p.id
                         else ""
                     )
+                    bag = ""
+                    if (
+                        k == T_BIKEBACK
+                        and p.bag_count > 0
+                        and solver.Value(mb.opt_bikeback[p.id])
+                    ):
+                        bag_word = "bag" if p.bag_count == 1 else "bags"
+                        bag = (
+                            f"; overnight bags: {p.bag_count} {bag_word}: "
+                            f"{p.name}: {p.bag_count} {bag_word}"
+                        )
                     steps.append(
                         f"{TRANSITION_LABELS[k]}: {verb}{bike} "
-                        f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)})"
+                        f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)}"
+                        f"{bag})"
                     )
                 for o in mb.owners:
                     key = (p.id, o.id, k, a, b)
