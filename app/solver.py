@@ -869,11 +869,11 @@ def _extract(problem, mb, solver, status) -> Solution:
                             role = "Drive your car"
                         else:
                             role = f"Ride with {mb.by_id[o.id].name}"
-                        cargo = _vehicle_bike_cargo_text(mb, solver, o.id, k, a, b)
+                        contents = _vehicle_contents_text(mb, solver, o.id, k, a, b)
                         steps.append(
                             f"{TRANSITION_LABELS[k]}: {role} "
                             f"({_loc_name(problem, p, a)} → {_loc_name(problem, p, b)}; "
-                            f"{cargo})"
+                            f"{contents})"
                         )
         if not steps:
             steps.append("Stay home — no travel needed.")
@@ -1056,5 +1056,49 @@ def _vehicle_bike_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: s
         if count:
             bike_parts.append(_bike_cargo_label(mb, owner, count))
     if not bike_parts:
-        return "carrying no bikes"
-    return f"carrying {bikes} bike{'s' if bikes != 1 else ''}: " + ", ".join(bike_parts)
+        return "bikes: none"
+    return f"bikes: {bikes} bike{'s' if bikes != 1 else ''}: " + ", ".join(bike_parts)
+
+
+def _vehicle_people_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) -> str:
+    """Readable people list for one car leg."""
+    driver = mb.by_id[car_owner_id].name
+    riders = [
+        p.name
+        for p in mb.people
+        if p.id != car_owner_id
+        and (p.id, car_owner_id, k, a, b) in mb.incar
+        and solver.Value(mb.incar[p.id, car_owner_id, k, a, b])
+    ]
+    if riders:
+        return f"people: {driver} (driver), " + ", ".join(riders)
+    return f"people: {driver} (driver)"
+
+
+def _vehicle_bag_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) -> str:
+    """Readable overnight-bag cargo for one car leg."""
+    bag_parts = []
+    bags = 0
+    for owner in mb.people:
+        key = (owner.id, car_owner_id, k, a, b)
+        if key not in mb.gincar:
+            continue
+        count = solver.Value(mb.gincar[key])
+        bags += count
+        if count:
+            bag_word = "bag" if count == 1 else "bags"
+            bag_parts.append(f"{owner.name}: {count} {bag_word}")
+    if not bag_parts:
+        return "overnight bags: none"
+    return f"overnight bags: {bags} bag{'s' if bags != 1 else ''}: " + ", ".join(bag_parts)
+
+
+def _vehicle_contents_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) -> str:
+    """Readable full contents of one car leg for personal itineraries."""
+    return "; ".join(
+        [
+            _vehicle_people_text(mb, solver, car_owner_id, k, a, b),
+            _vehicle_bike_cargo_text(mb, solver, car_owner_id, k, a, b),
+            _vehicle_bag_cargo_text(mb, solver, car_owner_id, k, a, b),
+        ]
+    )

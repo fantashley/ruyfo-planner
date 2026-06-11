@@ -173,7 +173,8 @@ def test_loaner_bike_lets_a_bikeless_rider_ride():
     bo_steps = " ".join(sol.itineraries["bo"]).lower()
     assert "loaner" in bo_steps and "alex" in bo_steps
     alex_steps = " ".join(sol.itineraries["alex"])
-    assert "carrying 2 bikes" in alex_steps
+    assert "people: Alex (driver)" in alex_steps
+    assert "bikes: 2 bikes" in alex_steps
     assert "loaner for Bo" in alex_steps
     assert any("spare bike for Bo" in s for s in sol.itineraries["alex"])
     assert any("loaner for Bo" in move for move in sol.car_moves)
@@ -206,6 +207,8 @@ def test_overnight_bag_reaches_hotel_via_sag():
     assert sol.status in ("optimal", "feasible")
     assert any("bag" in s.lower() and "sag" in s.lower()
                for s in sol.itineraries["ann"])
+    sage_steps = " ".join(sol.itineraries["sage"])
+    assert "overnight bags: 1 bag: Ann: 1 bag" in sage_steps
 
 
 def test_overnight_bag_without_finish_bound_vehicle_is_infeasible():
