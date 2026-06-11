@@ -10,8 +10,11 @@ from app.solver import (
     Pref,
     Problem,
     ReturnOption,
+    T_BIKEBACK,
+    T_HOME_TONIGHT,
     T_MORNING,
     _Model,
+    _extract,
     solve,
 )
 
@@ -272,6 +275,38 @@ def test_chain_drop_bikes_then_car_is_feasible():
     assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     # and Ash is still home when the morning begins
     assert solver.Value(mb.pat["ash", T_MORNING, H]) == 1
+
+
+def test_no_before_ride_day_note_for_a_post_ride_bike_return():
+    # A home-tonight rider whose bike strands and is ferried back through the
+    # start the *next* morning must NOT be told to "drop it before ride day".
+    # Force that exact leg: Robin is home tonight, but their bike rides the SAG's
+    # car finish->start the next morning (then home with their household partner).
+    quinn = Person(
+        id="quinn", name="Quinn", home_zip="55391", household="vance", has_car=True,
+        car_combos=[CarCombo(2, 2)], num_bikes=1, bag_count=1, can_drive_morning=True,
+        return_prefs=only(BIKEBACK),
+    )
+    robin = Person(
+        id="robin", name="Robin", home_zip="55391", household="vance", has_car=False,
+        num_bikes=1, return_prefs=only(TONIGHT),
+    )
+    sag = Person(
+        id="sag", name="Sag", home_zip="55410", is_rider=False, has_car=True,
+        car_combos=[CarCombo(7, 2)], is_sag_driver=True, can_drive_morning=True,
+        willing_drive_dropper_home=True,
+    )
+    problem = Problem(route=ROUTE, people=[quinn, robin, sag], has_sag=True)
+    mb = _Model(problem)
+    mb.m.Add(mb.pat["robin", T_HOME_TONIGHT, H] == 1)  # Robin made it home that night
+    mb.m.Add(mb.bincar["robin", "sag", T_BIKEBACK, F, S] == 1)  # bike ferried back next AM
+    solver = cp_model.CpSolver()
+    status = solver.Solve(mb.m)
+    assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    sol = _extract(problem, mb, solver, status)
+    steps = sol.itineraries["robin"]
+    assert not any("before ride day" in s for s in steps)  # the bug: no false drop note
+    assert any("brings your bike back" in s for s in steps)  # the real return is shown
 
 
 def test_household_rides_together():

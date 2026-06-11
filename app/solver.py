@@ -16,8 +16,6 @@ The problem is a small capacitated, time-expanded multi-commodity flow:
 We minimise total driving distance (+ an approximate pickup-detour term) plus a
 penalty for putting anyone on a merely-*acceptable* return option instead of
 their *preferred* one. With <=15 riders CP-SAT solves this to optimality fast.
-
-See ``/Users/ashley/.claude/plans/squishy-twirling-axolotl.md`` for the design.
 """
 
 from __future__ import annotations
@@ -882,7 +880,10 @@ def _extract(problem, mb, solver, status) -> Solution:
                     )
                     if owner_along:
                         continue  # bike travels with its owner — nothing to hand off
-                    if b == S and (ob.id, o.id) not in seen_out:
+                    # a "drop it before the ride" note only makes sense for genuine
+                    # pre-ride legs; after the ride a bike can pass through the start
+                    # just on its way home, which is not a hand-off to arrange
+                    if b == S and k <= T_MORNING and (ob.id, o.id) not in seen_out:
                         seen_out.add((ob.id, o.id))
                         prepend[ob.id].append(
                             f"Bike hand-off: get your bike to {o.name} before ride day "
