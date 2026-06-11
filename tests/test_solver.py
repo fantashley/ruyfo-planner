@@ -309,6 +309,25 @@ def test_no_before_ride_day_note_for_a_post_ride_bike_return():
     assert any("brings your bike back" in s for s in steps)  # the real return is shown
 
 
+def test_supporter_return_preference_is_honored():
+    # A SAG driver / supporter is now a full participant for return purposes: if
+    # they're unwilling to head home the next morning, they must be home the night
+    # of, like anyone else (rather than being kept out overnight to ferry things).
+    rider = Person(
+        id="r", name="R", home_zip="55408", has_car=False, num_bikes=1,
+        return_prefs=only(TONIGHT),
+    )
+    sag = Person(
+        id="sag", name="Sag", home_zip="55408", is_rider=False, has_car=True,
+        car_combos=[CarCombo(8, 8)], is_sag_driver=True, can_drive_morning=True,
+        return_prefs={TONIGHT: Pref.PREFERRED, BIKEBACK: Pref.UNWILLING,
+                      RIDEHOME: Pref.UNWILLING},
+    )
+    sol = solve(Problem(route=ROUTE, people=[rider, sag], has_sag=True))
+    assert sol.status in ("optimal", "feasible")
+    assert sol.return_outcome["sag"] == TONIGHT
+
+
 def test_household_rides_together():
     # A two-person household with one car, both happy to bike back. The plan
     # should be feasible and keep them on a willing option.

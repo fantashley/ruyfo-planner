@@ -90,11 +90,14 @@ class Person:
             self.car_combos = [CarCombo(people=5, bikes=2)]
         if not self.is_rider:
             self.num_bikes = 0
-        if self.is_rider and not self.return_prefs:
-            # default: prefer driving home tonight, accept the rest
+        if not self.return_prefs:
+            # default: prefer driving home the night of, accept the rest. Bike-back
+            # only makes sense for riders, so supporters are unwilling for it.
             self.return_prefs = {
                 ReturnOption.DRIVE_HOME_TONIGHT: Pref.PREFERRED,
-                ReturnOption.HOTEL_BIKE_BACK: Pref.ACCEPTABLE,
+                ReturnOption.HOTEL_BIKE_BACK: (
+                    Pref.ACCEPTABLE if self.is_rider else Pref.UNWILLING
+                ),
                 ReturnOption.HOTEL_RIDE_HOME: Pref.ACCEPTABLE,
             }
 
@@ -559,10 +562,12 @@ class _Model:
         self.home_tonight = {}
         self.opt_bikeback = {}
         self.opt_ridehome = {}
-        riders = [p for p in self.people if p.is_rider]
 
         pref_terms = []
-        for p in riders:
+        # everyone (riders *and* supporters/SAG driver) gets a return preference:
+        # home the night of, or stay over and head home the next morning. Only
+        # riders can bike back, so for non-riders bike-back is just always 0.
+        for p in self.people:
             ht = self.pat[p.id, T_HOME_TONIGHT, H]
             self.home_tonight[p.id] = ht
             # bike-back = pedalling *some* bike (own or loaner) back next morning
@@ -723,11 +728,9 @@ def _extract(problem, mb, solver, status) -> Solution:
     # preference penalty, which isn't real miles)
     sol.total_drive_miles = round(solver.Value(mb.dist_total) / SCALE, 1)
 
-    # return outcomes
+    # return outcomes (riders and supporters alike)
     deviations = 0
     for p in problem.people:
-        if not p.is_rider:
-            continue
         if solver.Value(mb.home_tonight[p.id]):
             opt = ReturnOption.DRIVE_HOME_TONIGHT
         elif solver.Value(mb.opt_bikeback[p.id]):
