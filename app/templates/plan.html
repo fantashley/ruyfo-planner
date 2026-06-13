@@ -1,6 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Plan — {{ event.name }}{% endblock %}
+
+{% macro icon(name) %}<svg class="ic" aria-hidden="true" viewBox="0 0 24 24"><use href="#i-{{ name }}"/></svg>{%- endmacro %}
+
+{% macro locpill(loc) %}{% if loc %}<span class="loc loc-{{ loc.kind }}">{{ icon({'home':'home','start':'flag','finish':'pin','other':'pin'}[loc.kind]) }}{{ loc.label }}</span>{% endif %}{%- endmacro %}
+
+{% macro avatar(person, role='passenger') %}<span class="avatar avatar-{{ role }}" data-tip="{{ person.name }}" aria-label="{{ person.name }}">{{ person.initials }}</span>{%- endmacro %}
+
 {% block content %}
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M5 12l-2 0l9 -9l9 9l-2 0"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"/><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0v-9z"/><path d="M5 21v-7"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M7 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M15 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M5 17h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5"/></symbol>
+  <symbol id="i-bike" viewBox="0 0 24 24"><path d="M5 18m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M19 18m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"/><path d="M14 7m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2"/><path d="M12 12l0 .01"/><path d="M3 13a20 20 0 0 0 18 0"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><path d="M3 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M19 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 12l2 2l4 -4"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1"/><path d="M20 12h1"/><path d="M12 3v1"/><path d="M12 20v1"/><path d="M5.6 5.6l.7 .7"/><path d="M17.7 17.7l.7 .7"/><path d="M5.6 18.4l.7 -.7"/><path d="M17.7 6.3l.7 -.7"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/></symbol>
+  <symbol id="i-sunset" viewBox="0 0 24 24"><path d="M3 17h1"/><path d="M20 17h1"/><path d="M6.6 11.6l.7 .7"/><path d="M16.7 12.3l.7 -.7"/><path d="M12 9v-6"/><path d="M9 6l3 3l3 -3"/><path d="M8 17a4 4 0 1 1 8 0"/><path d="M3 21h18"/></symbol>
+</svg>
+
 <p><a href="/events/{{ event.id }}">← Back to {{ event.name }}</a></p>
 <h1>Logistics plan</h1>
 <p class="muted">{{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}</p>
@@ -14,44 +37,177 @@
   </div>
 {% else %}
   <div class="summary">
-    <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>total drive miles</span></div>
-    <div class="stat"><b>{{ solution.pref_deviations }}</b><span>on a backup return option</span></div>
-    <div class="stat"><b>{{ "%.0f"|format(solution.max_burden) }}</b><span>heaviest individual burden</span></div>
-    <div class="stat"><b>{{ solution.status }}</b><span>solution</span></div>
+    <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>{{ icon('route') }} total drive miles</span></div>
+    <div class="stat"><b>{{ "%.0f"|format(solution.max_burden) }}</b><span>{{ icon('user') }} heaviest burden</span></div>
+    <div class="stat"><b>{{ solution.pref_deviations }}</b><span>{{ icon('arrow') }} on a backup return</span></div>
+    <div class="stat"><b>{{ solution.status }}</b><span>{{ icon('check') }} solution</span></div>
   </div>
 
-  <h2>Everyone's itinerary</h2>
-  <div class="itineraries">
+  <div class="legend">
+    <span><span class="swatch sw-home"></span>Home</span>
+    <span><span class="swatch sw-start"></span>{{ route.start_name }} · start</span>
+    <span><span class="swatch sw-finish"></span>{{ route.finish_name }} · finish</span>
+  </div>
+
+  <section class="plan-section">
+    <div class="section-head">
+      <h2>The day at a glance</h2>
+      <span class="muted">{{ solution.car_moves|length }} vehicle leg{{ "s" if solution.car_moves|length != 1 }}</span>
+    </div>
+  </section>
+
+  <div class="glance">
+    {% for group in solution.car_moves|glance_groups(route) %}
+      <div class="glance-group">
+        <div class="group-head">{{ icon(group.icon) }}{{ group.group }}</div>
+        <div class="legs">
+          {% for leg in group.legs %}
+          <div class="leg">
+            <div class="leg-main">
+              <div class="leg-route">
+                {% if leg.driver %}{{ avatar(leg.driver, 'driver') }}<span class="driver-name">{{ leg.driver.name }}</span>{% endif %}
+                {{ locpill(leg.origin) }}
+                {% if leg.origin and leg.dest %}{{ icon('arrow') }}{% endif %}
+                {{ locpill(leg.dest) }}
+              </div>
+              {% if leg.bikes or leg.bags %}
+              <div class="leg-cargo">
+                {% if leg.bikes %}{% set t = leg.bikes ~ " bike" ~ ("s" if leg.bikes != 1 else "") %}<span data-tip="{{ t }}" aria-label="{{ t }}">{{ icon('bike') }}{{ leg.bikes }}</span>{% endif %}
+                {% if leg.bags %}{% set t = leg.bags ~ " overnight bag" ~ ("s" if leg.bags != 1 else "") %}<span data-tip="{{ t }}" aria-label="{{ t }}">{{ icon('bag') }}{{ leg.bags }}</span>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+
+            {% if leg.passengers %}
+            <div class="leg-pax">
+              <span class="pax-label">carries</span>
+              <span class="avatars">{% for pax in leg.passengers %}{{ avatar(pax) }}{% endfor %}</span>
+            </div>
+            {% endif %}
+
+            {% if leg.purpose %}<p class="leg-purpose">{{ leg.purpose }}</p>{% endif %}
+
+            <details class="leg-more">
+              <summary>Details</summary>
+              <p>{{ leg.detail }}</p>
+              {% if leg.passengers %}<p class="muted">Passengers: {{ leg.passengers|map(attribute='name')|join(", ") }}.</p>{% endif %}
+              {% if leg.bike_owners %}
+                <p class="cargo-line">{{ icon('bike') }}<span><b>Bikes</b> — {{ leg.bike_owners|join("; ") }}</span></p>
+              {% endif %}
+              {% if leg.bag_owners %}
+                <p class="cargo-line">{{ icon('bag') }}<span><b>Overnight bags</b> — {{ leg.bag_owners|join("; ") }}</span></p>
+              {% endif %}
+            </details>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <section class="plan-section">
+    <div class="section-head">
+      <h2>People</h2>
+      <span class="muted">{{ people|length }} participant{{ "s" if people|length != 1 }}</span>
+    </div>
+  </section>
+
+  <div class="people-plan">
     {% for p in people %}
+    {% set sid = p.id|string %}
+    {% set steps = solution.itineraries[sid] %}
+    {% set notes = steps|plan_notes %}
+    {% set j = steps|journey(route) %}
     <div class="card person">
-      <h3>{{ p.name }}
-        <span class="muted">{{ p.home_zip }} · {% if p.is_rider %}rider{% else %}supporter{% endif %}</span>
-      </h3>
-      {% set sid = p.id|string %}
-      {% if sid in solution.return_outcome %}
-        <p class="badge">Return: {{ RETURN_LABELS[solution.return_outcome[sid]] }}</p>
+      <div class="person-head">
+        <span class="avatar avatar-lg avatar-{{ 'rider' if p.is_rider else 'supporter' }}">{{ p.name|initials }}</span>
+        <div class="person-id">
+          <h3>{{ p.name }} {{ icon('bike' if p.is_rider else 'user') }}</h3>
+          <span class="muted">{{ p.home_zip }} · {% if p.is_rider %}rider{% else %}supporter{% endif %}</span>
+        </div>
+        {% if sid in solution.return_outcome %}
+          <span class="badge">{{ solution.return_outcome[sid]|return_short }}</span>
+        {% endif %}
+      </div>
+
+      {% if j.stops %}
+        <div class="journey">
+          {% for stop in j.stops %}
+            {{ locpill(stop) }}
+            {% if not loop.last %}<span class="hop" data-tip="{{ j.legs[loop.index0].label }}" aria-label="{{ j.legs[loop.index0].label }}">{{ icon('bike' if j.legs[loop.index0].mode == 'bike' else 'car') }}</span>{% endif %}
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Stays home — no travel needed.</p>
       {% endif %}
+
       {% if sid in solution.burdens %}
         {% set b = solution.burdens[sid] %}
-        <p class="muted burden">Burden: {{ "%.0f"|format(b.total) }} eq-mi
-          — drives {{ "%.0f"|format(b.drive_miles) }} mi{% if b.chore_legs %},
-          {{ b.chore_legs }} chore leg{{ "s" if b.chore_legs != 1 }}{% endif %}{% if b.deviation %},
-          backup return{% endif %}</p>
+        {% set is_max = b.total and b.total == solution.max_burden %}
+        {% set pct = (b.total / solution.max_burden * 100) if solution.max_burden else 0 %}
+        <div class="burden-row">
+          <div class="burden-meta">
+            <span>{{ b|burden_summary }}</span>
+            {% if is_max %}<span class="tag-max">heaviest load</span>{% endif %}
+          </div>
+          <div class="bar"><div class="bar-fill{{ ' bar-max' if is_max }}" style="width: {{ "%.0f"|format(pct) }}%"></div></div>
+        </div>
       {% endif %}
-      <ol>
-        {% for step in solution.itineraries[sid] %}
-          <li>{{ step }}</li>
-        {% endfor %}
-      </ol>
+
+      {% if notes %}
+        <ul class="notes">
+          {% for note in notes %}
+            <li>{{ icon('bag' if note.startswith('Overnight bag') else 'bike') }}<span>{{ note|note_summary }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <details class="detail-plan">
+        <summary>Full itinerary</summary>
+        <ol class="detail-steps">
+          {% for step in steps %}
+            {% if step.startswith(("Bike hand-off:", "Loaner bike:", "Overnight bag:")) %}
+              <li class="note-line">{{ icon('bag' if step.startswith('Overnight bag') else 'bike') }}<span>{{ step }}</span></li>
+            {% else %}
+              {% set s = step|step_parts %}
+              <li>
+                <div class="istep">
+                  {% if s.phase %}<span class="phase-label">{{ s.phase }}</span>{% endif %}
+                  <b>{{ s.action }}</b>
+                  {% if s.route %}<span class="route-text">{{ s.route }}</span>{% endif %}
+                </div>
+                {% if s.cargo %}
+                  <ul class="contents">
+                    {% for line in s.cargo.split("; ") %}<li>{{ line }}</li>{% endfor %}
+                  </ul>
+                {% endif %}
+              </li>
+            {% endif %}
+          {% endfor %}
+        </ol>
+      </details>
     </div>
     {% endfor %}
   </div>
 
-  <h2>Car movements</h2>
-  <ul class="car-moves">
-    {% for move in solution.car_moves %}
-      <li>{{ move }}</li>
-    {% endfor %}
-  </ul>
+  <details class="car-detail">
+    <summary>Full car movement details</summary>
+    <ul class="car-moves detail-steps">
+      {% for move in solution.car_moves|chronological_moves %}
+        {% set m = move|move_detail %}
+        <li>
+          <div class="istep">
+            {% if m.phase %}<span class="phase-label">{{ m.phase }}</span>{% endif %}
+            <b>{{ m.headline }}</b>
+          </div>
+          {% if m.lines %}
+            <ul class="contents">
+              {% for line in m.lines %}<li>{{ line }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
 {% endif %}
 {% endblock %}

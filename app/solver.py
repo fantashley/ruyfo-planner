@@ -1056,6 +1056,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                     bikes = 0
                     bike_parts = []
                     bags = 0
+                    bag_parts = []
                     for ob in problem.people:
                         key = (ob.id, o.id, k, a, b)
                         if key in mb.bincar:
@@ -1064,7 +1065,11 @@ def _extract(problem, mb, solver, status) -> Solution:
                             if count:
                                 bike_parts.append(_bike_cargo_label(mb, ob, count))
                         if key in mb.gincar:
-                            bags += solver.Value(mb.gincar[key])
+                            gcount = solver.Value(mb.gincar[key])
+                            bags += gcount
+                            if gcount:
+                                bag_word = "bag" if gcount == 1 else "bags"
+                                bag_parts.append(f"{ob.name}: {gcount} {bag_word}")
                     # hide only truly empty no-op moves (owner lives at the
                     # endpoint and is carrying nobody/nothing)
                     if (
@@ -1080,7 +1085,13 @@ def _extract(problem, mb, solver, status) -> Solution:
                         biketxt += ", ".join(bike_parts)
                     else:
                         biketxt = "0 bikes"
-                    bagtxt = f"; {bags} bag{'s' if bags != 1 else ''}" if bags else ""
+                    if bag_parts:
+                        bagtxt = (
+                            f"; {bags} bag{'s' if bags != 1 else ''}: "
+                            + ", ".join(bag_parts)
+                        )
+                    else:
+                        bagtxt = ""
                     sol.car_moves.append(
                         f"{TRANSITION_LABELS[k]}: {o.name}'s car "
                         f"{_loc_name(problem, o, a)} → {_loc_name(problem, o, b)} "
