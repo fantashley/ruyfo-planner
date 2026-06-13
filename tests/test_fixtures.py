@@ -1,5 +1,7 @@
 from sqlmodel import SQLModel, Session, create_engine, select
+from sqlalchemy import text
 
+from app.db import _add_missing_sqlite_columns
 from app import fixtures
 from app.models import Participant
 from app.solver import solve
@@ -69,3 +71,19 @@ def test_seed_event_replaces_same_named_event():
         fixtures.seed_event(s, fx)  # second load replaces the first
         from app.models import Event
         assert len(s.exec(select(Event)).all()) == 1
+
+
+def test_sqlite_schema_migration_adds_new_participant_columns():
+    engine = create_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE participant DROP COLUMN share_household_car"))
+
+    _add_missing_sqlite_columns(engine)
+
+    with Session(engine) as s:
+        p = Participant(event_id=1, name="Pat", home_zip="55021")
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        assert p.share_household_car is False
