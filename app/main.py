@@ -935,6 +935,27 @@ def plan_page(request: Request, event_id: int):
         if ev.has_sag
         else None
     )
+    # people who didn't get a preferred return (for the "unmet preferences" stat)
+    unmet_lines: list[str] = []
+    for p in people:
+        sid = str(p.id)
+        burden = solution.burdens.get(sid) if solution else None
+        if not (burden and burden.get("deviation")):
+            continue
+        prefs = {
+            ReturnOption.DRIVE_HOME_TONIGHT: p.pref_tonight,
+            ReturnOption.HOTEL_BIKE_BACK: p.pref_bikeback,
+            ReturnOption.HOTEL_RIDE_HOME: p.pref_ridehome,
+        }
+        wanted = [
+            RETURN_SHORT_LABELS.get(opt, str(opt))
+            for opt, value in prefs.items() if value == "preferred"
+        ]
+        wanted_label = ", ".join(wanted) if wanted else "no preference"
+        actual = solution.return_outcome.get(sid)
+        got_label = RETURN_SHORT_LABELS.get(actual, str(actual)) if actual else "—"
+        unmet_lines.append(f"{p.name} — wanted {wanted_label}, got {got_label}")
+
     return templates.TemplateResponse(
         request,
         "plan.html",
@@ -945,6 +966,8 @@ def plan_page(request: Request, event_id: int):
             "people": people,
             "by_id": by_id,
             "sag_driver": sag_driver,
+            "unmet_count": len(unmet_lines),
+            "unmet_tip": "\n".join(unmet_lines),
             "empty": False,
         },
     )
