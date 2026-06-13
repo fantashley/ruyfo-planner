@@ -39,6 +39,7 @@ class Participant(SQLModel, table=True):
     can_drive_morning: bool = False
     is_sag_driver: bool = False
     share_household_car: bool = False
+    sag_extra_miles: int = 20  # SAG driver's extra-mileage tolerance beyond their route
 
     pref_tonight: str = Pref.PREFERRED.value
     pref_bikeback: str = Pref.ACCEPTABLE.value
@@ -85,6 +86,7 @@ def to_person(p: Participant) -> Person:
         can_drive_morning=p.can_drive_morning,
         is_sag_driver=p.is_sag_driver,
         share_household_car=p.share_household_car,
+        sag_extra_miles=p.sag_extra_miles,
         return_prefs={
             ReturnOption.DRIVE_HOME_TONIGHT: Pref(p.pref_tonight),
             ReturnOption.HOTEL_BIKE_BACK: Pref(p.pref_bikeback),

@@ -303,6 +303,7 @@ def test_overnight_bag_prefers_morning_sag_over_mankato_drop():
         id="sage", name="Sage", home_zip="55021", is_rider=False, has_car=True,
         car_combos=[CarCombo(people=8, bikes=8)], is_sag_driver=True,
         can_drive_morning=True, willing_drive_dropper_home=True,
+        sag_extra_miles=500,  # volunteer for extra SAG driving (this setup needs it)
     )
     problem = Problem(route=ROUTE, people=[ann, bob, sage], has_sag=True)
     mb = _Model(problem)
@@ -383,6 +384,7 @@ def test_no_before_ride_day_note_for_a_post_ride_bike_return():
         id="sag", name="Sag", home_zip="55410", is_rider=False, has_car=True,
         car_combos=[CarCombo(7, 2)], is_sag_driver=True, can_drive_morning=True,
         willing_drive_dropper_home=True,
+        sag_extra_miles=500,  # volunteer: this setup needs a next-morning SAG backtrack
     )
     problem = Problem(route=ROUTE, people=[quinn, robin, sag], has_sag=True)
     mb = _Model(problem)
@@ -733,3 +735,29 @@ def test_bikeback_rider_sleeps_at_finish_then_pedals_to_start():
     assert solver.Value(mb.pat["a", T_BIKEBACK, S]) == 0      # not at the start overnight
     assert solver.Value(mb.pat["a", T_BIKEBACK, F]) == 1      # slept at the finish hotel
     assert solver.Value(mb.pat["a", T_BIKEBACK + 1, S]) == 1  # pedalled back to the start
+
+
+def test_sag_extra_driving_is_capped_by_tolerance():
+    # The SAG's only obligation is the sweep plus getting itself home. Forcing a
+    # needless night-before run out to the finish is well over the default 20-mi
+    # tolerance, so it is infeasible until the driver volunteers a larger budget.
+    rider = Person(
+        id="r", name="R", home_zip="55021", num_bikes=1, return_prefs=only(BIKEBACK),
+    )
+
+    def model(extra):
+        # the willingness flags clear the night-before gate so the SAG cap is the
+        # only thing that can forbid the forced extra leg
+        sag = Person(
+            id="s", name="S", home_zip="55410", is_rider=False, has_car=True,
+            car_combos=[CarCombo(8, 8)], is_sag_driver=True, can_drive_morning=True,
+            willing_drop_car=True, willing_drive_dropper_home=True,
+            sag_extra_miles=extra,
+        )
+        mb = _Model(Problem(route=ROUTE, people=[rider, sag], has_sag=True))
+        mb.m.Add(mb.cmove["s", 0, H, F] == 1)  # a needless night-before run to the finish
+        return mb
+
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model(0).m) == cp_model.INFEASIBLE
+    assert solver.Solve(model(300).m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)

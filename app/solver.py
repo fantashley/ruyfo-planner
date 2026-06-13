@@ -79,6 +79,8 @@ class Person:
     can_drive_morning: bool = False  # ferry others to the start the morning of
     is_sag_driver: bool = False  # drives the SAG wagon (route sweep)
     share_household_car: bool = False  # opt in to pooling cars with the household
+    sag_extra_miles: int = 20  # SAG driver only: extra base miles beyond their own
+    #   home->start->finish->home route they'll drive (hard cap on SAG over-use)
 
     # return preferences: every option marked preferred / acceptable / unwilling
     return_prefs: dict[ReturnOption, Pref] = field(default_factory=dict)
@@ -434,6 +436,42 @@ class _Model:
 
         # ---- return options + objective ----------------------------------- #
         self._build_returns_and_objective()
+
+        # ---- SAG over-use cap --------------------------------------------- #
+        self._build_sag_limit()
+
+    def _build_sag_limit(self):
+        """Hard-cap how far the SAG wagon may be driven.
+
+        The SAG's only obligation is the ride sweep (start -> finish). Its free
+        baseline is the minimal drive it must do anyway — home -> start (to reach
+        the sweep) + start -> finish (the sweep) + finish -> home — so carrying
+        people on those same legs is free. Any *extra* base miles beyond that
+        baseline (e.g. a finish -> start backtrack, or multi-town detours) are
+        forbidden once they exceed the SAG driver's stated tolerance
+        (`sag_extra_miles`, default 20). Set a larger tolerance to volunteer for
+        more; an over-budget plan is reported infeasible.
+        """
+        if not self.sag:
+            return
+        sag = self.sag
+        baseline = (
+            _arc_distance(sag.home_zip, self.route, H, S)
+            + _arc_distance(sag.home_zip, self.route, S, F)
+            + _arc_distance(sag.home_zip, self.route, F, H)
+        )
+        budget = round((baseline + max(0, sag.sag_extra_miles)) * SCALE)
+        miles = []
+        for k in range(NK):
+            for (a, b) in ALLOWED_ARCS[k]:
+                mv = self.cmove.get((sag.id, k, a, b))
+                if mv is None:
+                    continue
+                d = round(_arc_distance(sag.home_zip, self.route, a, b) * SCALE)
+                if d:
+                    miles.append(d * mv)
+        if miles:
+            self.m.Add(sum(miles) <= budget)
 
     def _person_carried(self, pid, k, frm=None, to=None):
         """All ways person ``pid`` traverses an arc at step ``k`` (filtered by end)."""

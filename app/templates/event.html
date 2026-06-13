@@ -98,8 +98,13 @@
         <label class="check"><input type="checkbox" name="share_household_car">
           Pool cars with my household (we can drive each other's cars)</label>
         {% if event.has_sag %}
-        <label class="check"><input type="checkbox" name="is_sag_driver">
+        <label class="check"><input type="checkbox" name="is_sag_driver" id="is_sag_driver">
           I'll drive the SAG wagon</label>
+        <label id="sag-extra-field">Extra SAG miles I'll drive beyond my own route
+          <input name="sag_extra_miles" type="number" min="0" value="20">
+          <small class="muted">The SAG only has to sweep start→finish and get itself home.
+          This is how far past that you'll go for extra ferrying or backtracks.</small>
+        </label>
         {% endif %}
       </fieldset>
 
@@ -124,4 +129,17 @@
     </form>
   </section>
 </div>
+
+<script>
+(function () {
+  function toggle(el, show) { if (el) el.style.display = show ? "" : "none"; }
+
+  var sag = document.getElementById("is_sag_driver");
+  var sagExtra = document.getElementById("sag-extra-field");
+  if (sag && sagExtra) {
+    var syncSag = function () { toggle(sagExtra, sag.checked); };
+    sag.addEventListener("change", syncSag); syncSag();
+  }
+})();
+</script>
 {% endblock %}
