@@ -317,6 +317,11 @@ class _Model:
             # be a round trip home (droppers get a ride back). Cars/bikes left at
             # the start or finish still stay put; this only pins people.
             m.Add(self.pat[p.id, T_MORNING, H] == 1)
+            # nobody sleeps at the start town: overnight (the Saturday-morning
+            # wake point) everyone is at home or the finish hotel, never at S.
+            # Bike-back riders are unaffected — they wake at F and pedal F->S
+            # during T_BIKEBACK, reaching S only at the next time point.
+            m.Add(self.pat[p.id, T_BIKEBACK, S] == 0)
             if p.is_rider:
                 m.Add(self.pat[p.id, T_RIDE, S] == 1)  # at start for the ride
                 m.Add(self.pat[p.id, T_RIDE + 1, F] == 1)  # at finish after the ride

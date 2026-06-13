@@ -704,3 +704,32 @@ def test_household_rides_together():
     sol = solve(problem)
     assert sol.status in ("optimal", "feasible")
     _no_unwilling_outcomes(problem, sol)
+
+
+def test_nobody_sleeps_at_the_start_town():
+    # Overnight (the Saturday-morning wake point, T_BIKEBACK) nobody may be at
+    # the start town — everyone is at home or the finish hotel. Pinning a person
+    # to the start at that point must be infeasible.
+    a = Person(
+        id="a", name="Ann", home_zip="55416", has_car=True,
+        return_prefs=only(BIKEBACK),
+    )
+    mb = _Model(Problem(route=ROUTE, people=[a]))
+    mb.m.Add(mb.pat["a", T_BIKEBACK, S] == 1)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) == cp_model.INFEASIBLE
+
+
+def test_bikeback_rider_sleeps_at_finish_then_pedals_to_start():
+    # A bike-back rider must wake at the finish hotel (not the start) and only
+    # reach the start by pedalling F->S during the bike-back leg.
+    a = Person(
+        id="a", name="Ann", home_zip="55416", has_car=True,
+        return_prefs=only(BIKEBACK),
+    )
+    mb = _Model(Problem(route=ROUTE, people=[a]))
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mb.pat["a", T_BIKEBACK, S]) == 0      # not at the start overnight
+    assert solver.Value(mb.pat["a", T_BIKEBACK, F]) == 1      # slept at the finish hotel
+    assert solver.Value(mb.pat["a", T_BIKEBACK + 1, S]) == 1  # pedalled back to the start
