@@ -57,6 +57,13 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev]"   # or: pip install -r the deps in pyproject
 ```
 
+Or, with Nix flakes:
+
+```bash
+nix develop
+python -m pytest
+```
+
 ## Run
 
 ```bash
