@@ -753,7 +753,7 @@ def add_participant(
     is_rider: str | None = Form(None),
     num_bikes: int = Form(1),
     loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
-    bag_count: int = Form(0),
+    has_overnight_bag: str | None = Form(None),
     car_combos: str = Form(""),
     willing_drop_car: str | None = Form(None),
     willing_drop_bikes_at_start: str | None = Form(None),
@@ -794,6 +794,7 @@ def add_participant(
             if target is not None and target.event_id == event_id:
                 household_value = target.household or str(target.id)
         loaner_ids = ",".join(b for b in loaner_for if b)
+        riding = _checkbox(is_rider)
 
         p = Participant(
             event_id=event_id,
@@ -801,10 +802,10 @@ def add_participant(
             email=email,
             home_zip=geo.normalize_zip(home_zip),
             household=household_value,
-            is_rider=_checkbox(is_rider),
-            num_bikes=num_bikes,
+            is_rider=riding,
+            num_bikes=num_bikes if riding else 0,  # "bikes I'll ride" only applies to riders
             loaner_for=loaner_ids,
-            bag_count=bag_count,
+            bag_count=1 if _checkbox(has_overnight_bag) else 0,
             has_car=has_car,
             car_combos=car_combos,
             willing_drop_car=_checkbox(willing_drop_car),

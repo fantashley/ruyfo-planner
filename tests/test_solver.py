@@ -761,3 +761,22 @@ def test_sag_extra_driving_is_capped_by_tolerance():
     solver = cp_model.CpSolver()
     assert solver.Solve(model(0).m) == cp_model.INFEASIBLE
     assert solver.Solve(model(300).m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+def test_overnight_bag_ignored_when_owner_goes_home_tonight():
+    # A bag only matters if its owner stays over. A home-tonight rider's bag is
+    # never required at — nor moved to — the finish; it just stays home.
+    ann = Person(
+        id="ann", name="Ann", home_zip="55021", has_car=True, willing_drop_car=True,
+        bag_count=1, return_prefs=only(TONIGHT),
+    )
+    carl = Person(
+        id="carl", name="Carl", home_zip="56001", has_car=True, is_rider=False,
+        can_drive_morning=True, willing_drive_dropper_home=True,
+    )
+    problem = Problem(route=ROUTE, people=[ann, carl])
+    mb = _Model(problem)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mb.home_tonight["ann"]) == 1
+    assert all(solver.Value(mb.gat["ann", t, F]) == 0 for t in range(10))
