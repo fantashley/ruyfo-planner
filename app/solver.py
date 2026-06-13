@@ -265,21 +265,21 @@ class _Model:
         for o in self.owners:
             for t in range(NK + 1):
                 for l in LOCS:
-                    self.cat[o.id, t, l] = m.NewBoolVar(f"cat_{o.id}_{t}_{l}")
-                m.Add(sum(self.cat[o.id, t, l] for l in LOCS) == 1)
+                    self.cat[o.id, t, l] = m.new_bool_var(f"cat_{o.id}_{t}_{l}")
+                m.add(sum(self.cat[o.id, t, l] for l in LOCS) == 1)
             # starts and ends at home
-            m.Add(self.cat[o.id, 0, H] == 1)
-            m.Add(self.cat[o.id, NK, H] == 1)
+            m.add(self.cat[o.id, 0, H] == 1)
+            m.add(self.cat[o.id, NK, H] == 1)
             for k in range(NK):
                 for l in LOCS:
-                    self.cstay[o.id, k, l] = m.NewBoolVar(f"cstay_{o.id}_{k}_{l}")
+                    self.cstay[o.id, k, l] = m.new_bool_var(f"cstay_{o.id}_{k}_{l}")
                 for (a, b) in ALLOWED_ARCS[k]:
-                    self.cmove[o.id, k, a, b] = m.NewBoolVar(f"cmove_{o.id}_{k}_{a}{b}")
+                    self.cmove[o.id, k, a, b] = m.new_bool_var(f"cmove_{o.id}_{k}_{a}{b}")
                     for ci in range(len(o.car_combos)):
-                        self.combosel[o.id, k, a, b, ci] = m.NewBoolVar(
+                        self.combosel[o.id, k, a, b, ci] = m.new_bool_var(
                             f"combo_{o.id}_{k}_{a}{b}_{ci}"
                         )
-                    m.Add(
+                    m.add(
                         sum(
                             self.combosel[o.id, k, a, b, ci]
                             for ci in range(len(o.car_combos))
@@ -293,14 +293,14 @@ class _Model:
                         for (a, b) in ALLOWED_ARCS[k]
                         if a == l
                     ]
-                    m.Add(self.cat[o.id, k, l] == sum(out))
+                    m.add(self.cat[o.id, k, l] == sum(out))
                 for l in LOCS:
                     inn = [self.cstay[o.id, k, l]] + [
                         self.cmove[o.id, k, a, b]
                         for (a, b) in ALLOWED_ARCS[k]
                         if b == l
                     ]
-                    m.Add(self.cat[o.id, k + 1, l] == sum(inn))
+                    m.add(self.cat[o.id, k + 1, l] == sum(inn))
 
         # ---- people ------------------------------------------------------- #
         self.pat = {}  # (pid, t, loc)
@@ -311,26 +311,26 @@ class _Model:
         for p in self.people:
             for t in range(NK + 1):
                 for l in LOCS:
-                    self.pat[p.id, t, l] = m.NewBoolVar(f"pat_{p.id}_{t}_{l}")
-                m.Add(sum(self.pat[p.id, t, l] for l in LOCS) == 1)
-            m.Add(self.pat[p.id, 0, H] == 1)
-            m.Add(self.pat[p.id, NK, H] == 1)
+                    self.pat[p.id, t, l] = m.new_bool_var(f"pat_{p.id}_{t}_{l}")
+                m.add(sum(self.pat[p.id, t, l] for l in LOCS) == 1)
+            m.add(self.pat[p.id, 0, H] == 1)
+            m.add(self.pat[p.id, NK, H] == 1)
             # everyone sleeps at home the night before — any night-before drop must
             # be a round trip home (droppers get a ride back). Cars/bikes left at
             # the start or finish still stay put; this only pins people.
-            m.Add(self.pat[p.id, T_MORNING, H] == 1)
+            m.add(self.pat[p.id, T_MORNING, H] == 1)
             # nobody sleeps at the start town: overnight (the Saturday-morning
             # wake point) everyone is at home or the finish hotel, never at S.
             # Bike-back riders are unaffected — they wake at F and pedal F->S
             # during T_BIKEBACK, reaching S only at the next time point.
-            m.Add(self.pat[p.id, T_BIKEBACK, S] == 0)
+            m.add(self.pat[p.id, T_BIKEBACK, S] == 0)
             if p.is_rider:
-                m.Add(self.pat[p.id, T_RIDE, S] == 1)  # at start for the ride
-                m.Add(self.pat[p.id, T_RIDE + 1, F] == 1)  # at finish after the ride
+                m.add(self.pat[p.id, T_RIDE, S] == 1)  # at start for the ride
+                m.add(self.pat[p.id, T_RIDE + 1, F] == 1)  # at finish after the ride
 
             for k in range(NK):
                 for l in LOCS:
-                    self.pstay[p.id, k, l] = m.NewBoolVar(f"pstay_{p.id}_{k}_{l}")
+                    self.pstay[p.id, k, l] = m.new_bool_var(f"pstay_{p.id}_{k}_{l}")
                 for (a, b) in ALLOWED_ARCS[k]:
                     # bicycle moves: the ride (S->F) and a next-morning bike-back
                     # (F->S). A rider may pedal their own bike or a loaner, so the
@@ -341,7 +341,7 @@ class _Model:
                         or (k == T_BIKEBACK and (a, b) == (F, S))
                     ):
                         for owner_id in self.bike_owners_for_rider.get(p.id, ()):
-                            self.bike_self[p.id, owner_id, k, a, b] = m.NewBoolVar(
+                            self.bike_self[p.id, owner_id, k, a, b] = m.new_bool_var(
                                 f"bike_{p.id}_{owner_id}_{k}_{a}{b}"
                             )
                     for o in self.owners:
@@ -356,7 +356,7 @@ class _Model:
                             and not (self.sag and o.id == self.sag.id)
                         ):
                             continue
-                        self.incar[p.id, o.id, k, a, b] = m.NewBoolVar(
+                        self.incar[p.id, o.id, k, a, b] = m.new_bool_var(
                             f"in_{p.id}_{o.id}_{k}_{a}{b}"
                         )
 
@@ -364,13 +364,13 @@ class _Model:
             for k in range(NK):
                 for l in LOCS:
                     carried_out = self._person_carried(p.id, k, frm=l)
-                    m.Add(
+                    m.add(
                         self.pat[p.id, k, l]
                         == self.pstay[p.id, k, l] + sum(carried_out)
                     )
                 for l in LOCS:
                     carried_in = self._person_carried(p.id, k, to=l)
-                    m.Add(
+                    m.add(
                         self.pat[p.id, k + 1, l]
                         == self.pstay[p.id, k, l] + sum(carried_in)
                     )
@@ -399,28 +399,28 @@ class _Model:
                     if not shared:
                         # owner is the only possible driver of their own car
                         if (o.id, o.id, k, a, b) in self.incar:
-                            m.Add(self.incar[o.id, o.id, k, a, b] == move)
+                            m.add(self.incar[o.id, o.id, k, a, b] == move)
                             self.drives[o.id, o.id, k, a, b] = move
                         else:
-                            m.Add(move == 0)
+                            m.add(move == 0)
                     else:
                         # any opted-in household member who can be aboard may drive
                         dvs = []
                         for hm_id in eligible_drivers:
                             if (hm_id, o.id, k, a, b) not in self.incar:
                                 continue
-                            dv = m.NewBoolVar(f"drv_{hm_id}_{o.id}_{k}_{a}{b}")
-                            m.Add(dv <= self.incar[hm_id, o.id, k, a, b])
+                            dv = m.new_bool_var(f"drv_{hm_id}_{o.id}_{k}_{a}{b}")
+                            m.add(dv <= self.incar[hm_id, o.id, k, a, b])
                             self.drives[hm_id, o.id, k, a, b] = dv
                             dvs.append(dv)
-                        m.Add(move == sum(dvs))  # exactly one driver iff it moves
+                        m.add(move == sum(dvs))  # exactly one driver iff it moves
                     riders_in = [
                         self.incar[p.id, o.id, k, a, b]
                         for p in self.people
                         if (p.id, o.id, k, a, b) in self.incar
                     ]
                     # people capacity from the chosen combo
-                    m.Add(
+                    m.add(
                         sum(riders_in)
                         <= sum(
                             self.combosel[o.id, k, a, b, ci] * o.car_combos[ci].people
@@ -471,7 +471,7 @@ class _Model:
                 if d:
                     miles.append(d * mv)
         if miles:
-            self.m.Add(sum(miles) <= budget)
+            self.m.add(sum(miles) <= budget)
 
     def _person_carried(self, pid, k, frm=None, to=None):
         """All ways person ``pid`` traverses an arc at step ``k`` (filtered by end)."""
@@ -506,7 +506,7 @@ class _Model:
             # leaving a car at the finish overnight (parked there when morning
             # begins) requires the owner's willingness — it's the owner's car
             if not o.willing_drop_car:
-                m.Add(self.cat[o.id, T_MORNING, F] == 0)
+                m.add(self.cat[o.id, T_MORNING, F] == 0)
             # these are *driver* chores: with shared household cars, whoever is
             # actually driving must have opted in (not just the car's owner).
             for k in NIGHT_BEFORE:
@@ -514,7 +514,7 @@ class _Model:
                 # willing either to drop a car at the finish or retrieve a dropper.
                 for a in (H, S):
                     if (o.id, k, a, F) in self.cmove:
-                        m.Add(
+                        m.add(
                             self.cmove[o.id, k, a, F]
                             <= sum(
                                 willing_drivers(
@@ -528,7 +528,7 @@ class _Model:
                         )
                 # night-before bike shuttle to the start — any night-before H->S leg
                 if (o.id, k, H, S) in self.cmove:
-                    m.Add(
+                    m.add(
                         self.cmove[o.id, k, H, S]
                         <= sum(willing_drivers(k, H, S, "willing_drop_bikes_at_start"))
                     )
@@ -537,7 +537,7 @@ class _Model:
                 ok = willing_drivers(k, F, H, "willing_drive_dropper_home")
                 for p in self.people:
                     if p.household != o.household and (p.id, o.id, k, F, H) in self.incar:
-                        m.Add(self.incar[p.id, o.id, k, F, H] <= sum(ok))
+                        m.add(self.incar[p.id, o.id, k, F, H] <= sum(ok))
             # morning: carrying *non-household* others to the start
             ok = willing_drivers(T_MORNING, H, S, "can_drive_morning")
             for p in self.people:
@@ -545,7 +545,7 @@ class _Model:
                     p.household != o.household
                     and (p.id, o.id, T_MORNING, H, S) in self.incar
                 ):
-                    m.Add(self.incar[p.id, o.id, T_MORNING, H, S] <= sum(ok))
+                    m.add(self.incar[p.id, o.id, T_MORNING, H, S] <= sum(ok))
 
     def _build_bikes(self):
         m = self.m
@@ -559,31 +559,31 @@ class _Model:
             nb = self.total_bikes[ob.id]  # own bikes + loaners they bring
             for t in range(NK + 1):
                 for l in LOCS:
-                    self.bat[ob.id, t, l] = m.NewIntVar(0, nb, f"bat_{ob.id}_{t}_{l}")
-                m.Add(sum(self.bat[ob.id, t, l] for l in LOCS) == nb)
-            m.Add(self.bat[ob.id, 0, H] == nb)  # bikes start at home
-            m.Add(self.bat[ob.id, NK, H] == nb)  # ... and end at home
+                    self.bat[ob.id, t, l] = m.new_int_var(0, nb, f"bat_{ob.id}_{t}_{l}")
+                m.add(sum(self.bat[ob.id, t, l] for l in LOCS) == nb)
+            m.add(self.bat[ob.id, 0, H] == nb)  # bikes start at home
+            m.add(self.bat[ob.id, NK, H] == nb)  # ... and end at home
             # every bike in play is ridden (by the owner or a declared borrower),
             # so all of them are at the start for the ride and the finish after
-            m.Add(self.bat[ob.id, T_RIDE, S] == nb)
-            m.Add(self.bat[ob.id, T_RIDE + 1, F] == nb)
+            m.add(self.bat[ob.id, T_RIDE, S] == nb)
+            m.add(self.bat[ob.id, T_RIDE + 1, F] == nb)
 
             for k in range(NK):
                 for l in LOCS:
-                    self.bstay[ob.id, k, l] = m.NewIntVar(0, nb, f"bstay_{ob.id}_{k}_{l}")
+                    self.bstay[ob.id, k, l] = m.new_int_var(0, nb, f"bstay_{ob.id}_{k}_{l}")
                 for (a, b) in ALLOWED_ARCS[k]:
                     for o in self.owners:
                         if (o.id, k, a, b) in self.cmove:
-                            self.bincar[ob.id, o.id, k, a, b] = m.NewIntVar(
+                            self.bincar[ob.id, o.id, k, a, b] = m.new_int_var(
                                 0, nb, f"binc_{ob.id}_{o.id}_{k}_{a}{b}"
                             )
                 # bike flow conservation
                 for l in LOCS:
                     out = [self.bstay[ob.id, k, l]] + self._bike_moved(ob.id, k, frm=l)
-                    m.Add(self.bat[ob.id, k, l] == sum(out))
+                    m.add(self.bat[ob.id, k, l] == sum(out))
                 for l in LOCS:
                     inn = [self.bstay[ob.id, k, l]] + self._bike_moved(ob.id, k, to=l)
-                    m.Add(self.bat[ob.id, k + 1, l] == sum(inn))
+                    m.add(self.bat[ob.id, k + 1, l] == sum(inn))
 
         # bike capacity per car move + a bicyclist carries exactly one own bike
         for o in self.owners:
@@ -594,7 +594,7 @@ class _Model:
                         for ob in owners_with_bikes
                         if (ob.id, o.id, k, a, b) in self.bincar
                     ]
-                    m.Add(
+                    m.add(
                         sum(bikes_in)
                         <= sum(
                             self.combosel[o.id, k, a, b, ci] * o.car_combos[ci].bikes
@@ -639,47 +639,47 @@ class _Model:
             nb = ob.bag_count
             for t in range(NK + 1):
                 for l in LOCS:
-                    self.gat[ob.id, t, l] = m.NewIntVar(0, nb, f"gat_{ob.id}_{t}_{l}")
-                m.Add(sum(self.gat[ob.id, t, l] for l in LOCS) == nb)
-            m.Add(self.gat[ob.id, 0, H] == nb)  # bags start at home
-            m.Add(self.gat[ob.id, NK, H] == nb)  # ... and end at home
+                    self.gat[ob.id, t, l] = m.new_int_var(0, nb, f"gat_{ob.id}_{t}_{l}")
+                m.add(sum(self.gat[ob.id, t, l] for l in LOCS) == nb)
+            m.add(self.gat[ob.id, 0, H] == nb)  # bags start at home
+            m.add(self.gat[ob.id, NK, H] == nb)  # ... and end at home
             # at the finish (hotel) by the evening, and still there Friday night,
             # iff staying overnight
             if ob.id in self.home_tonight:
                 stay = 1 - self.home_tonight[ob.id]  # 1 == hotel overnight
-                m.Add(self.gat[ob.id, T_RIDE + 1, F] >= nb * stay)
-                m.Add(self.gat[ob.id, T_HOME_TONIGHT, F] >= nb * stay)
+                m.add(self.gat[ob.id, T_RIDE + 1, F] >= nb * stay)
+                m.add(self.gat[ob.id, T_HOME_TONIGHT, F] >= nb * stay)
             for t in range(1, T_MORNING + 1):
                 for l in (S, F):
                     parked_cars = [self.cat[o.id, t, l] for o in self.owners]
-                    m.Add(self.gat[ob.id, t, l] <= nb * sum(parked_cars))
+                    m.add(self.gat[ob.id, t, l] <= nb * sum(parked_cars))
 
             for k in range(NK):
                 for l in LOCS:
-                    self.gstay[ob.id, k, l] = m.NewIntVar(
+                    self.gstay[ob.id, k, l] = m.new_int_var(
                         0, nb, f"gstay_{ob.id}_{k}_{l}"
                     )
                 for (a, b) in ALLOWED_ARCS[k]:
                     for o in self.owners:
                         if (o.id, k, a, b) in self.cmove:
-                            g = m.NewIntVar(0, nb, f"ginc_{ob.id}_{o.id}_{k}_{a}{b}")
+                            g = m.new_int_var(0, nb, f"ginc_{ob.id}_{o.id}_{k}_{a}{b}")
                             self.gincar[ob.id, o.id, k, a, b] = g
                             # bags ride only a car that actually makes the move;
                             # they don't consume people/bike capacity (small)
-                            m.Add(g <= nb * self.cmove[o.id, k, a, b])
+                            m.add(g <= nb * self.cmove[o.id, k, a, b])
                             if k in NIGHT_BEFORE and b in (S, F):
                                 # A night-before bag staging run must leave the
                                 # bag inside a car parked at that location; do
                                 # not assume unattended bags can transfer between
                                 # cars after the carrier leaves.
-                                m.Add(g <= nb * self.cat[o.id, T_MORNING, b])
+                                m.add(g <= nb * self.cat[o.id, T_MORNING, b])
                 # bag flow conservation (cars only — bags are never pedalled)
                 for l in LOCS:
                     out = [self.gstay[ob.id, k, l]] + self._bag_moved(ob.id, k, frm=l)
-                    m.Add(self.gat[ob.id, k, l] == sum(out))
+                    m.add(self.gat[ob.id, k, l] == sum(out))
                 for l in LOCS:
                     inn = [self.gstay[ob.id, k, l]] + self._bag_moved(ob.id, k, to=l)
-                    m.Add(self.gat[ob.id, k + 1, l] == sum(inn))
+                    m.add(self.gat[ob.id, k + 1, l] == sum(inn))
 
     def _bag_moved(self, ob_id, k, frm=None, to=None):
         terms = []
@@ -715,18 +715,18 @@ class _Model:
                 for owner_id in self.bike_owners_for_rider.get(p.id, ())
                 if (p.id, owner_id, T_BIKEBACK, F, S) in self.bike_self
             ]
-            bb = m.NewBoolVar(f"bikeback_{p.id}")
-            m.Add(bb == sum(bb_terms))  # person flow guarantees the sum is <= 1
+            bb = m.new_bool_var(f"bikeback_{p.id}")
+            m.add(bb == sum(bb_terms))  # person flow guarantees the sum is <= 1
             self.opt_bikeback[p.id] = bb
-            m.Add(bb + ht <= 1)  # can't bike back if already home tonight
-            rh = m.NewBoolVar(f"ridehome_{p.id}")
-            m.Add(rh == 1 - ht - bb)
+            m.add(bb + ht <= 1)  # can't bike back if already home tonight
+            rh = m.new_bool_var(f"ridehome_{p.id}")
+            m.add(rh == 1 - ht - bb)
             self.opt_ridehome[p.id] = rh
             # If someone went home the night of the ride, they're done: no
             # next-morning errands or passenger legs. Their bikes/bags may still
             # be ferried by someone who stayed over.
             for t in range(T_HOME_TONIGHT, NK + 1):
-                m.Add(self.pat[p.id, t, H] >= ht)
+                m.add(self.pat[p.id, t, H] >= ht)
 
             options = {
                 ReturnOption.DRIVE_HOME_TONIGHT: ht,
@@ -737,13 +737,13 @@ class _Model:
             for opt, var in options.items():
                 pr = p.pref(opt)
                 if pr == Pref.UNWILLING:
-                    m.Add(var == 0)
+                    m.add(var == 0)
                 elif pr == Pref.ACCEPTABLE:
                     acceptable_vars.append(var)
             # exactly one option is true, so this sums to 0 or 1: did this person
             # land on a merely-acceptable option instead of their preferred one?
-            dev = m.NewBoolVar(f"dev_{p.id}")
-            m.Add(dev == sum(acceptable_vars))
+            dev = m.new_bool_var(f"dev_{p.id}")
+            m.add(dev == sum(acceptable_vars))
             self.deviation[p.id] = dev
             pref_terms.append(dev)
 
@@ -779,20 +779,20 @@ class _Model:
                             if (p.id, o.id, k, a, b) in self.gincar:
                                 dist_terms.append(det * self.gincar[p.id, o.id, k, a, b])
 
-        self.dist_total = m.NewIntVar(0, 10_000_000, "dist_total")
-        m.Add(self.dist_total == sum(dist_terms))
+        self.dist_total = m.new_int_var(0, 10_000_000, "dist_total")
+        m.add(self.dist_total == sum(dist_terms))
         cargo_terms = list(self.bincar.values()) + list(self.gincar.values())
-        self.cargo_motion_total = m.NewIntVar(0, 10_000_000, "cargo_motion_total")
-        m.Add(self.cargo_motion_total == sum(cargo_terms))
+        self.cargo_motion_total = m.new_int_var(0, 10_000_000, "cargo_motion_total")
+        m.add(self.cargo_motion_total == sum(cargo_terms))
         night_before_bag_drop_terms = [
             var
             for (ob_id, owner_id, k, a, b), var in self.gincar.items()
             if k in NIGHT_BEFORE and b == F
         ]
-        self.night_before_bag_drop_total = m.NewIntVar(
+        self.night_before_bag_drop_total = m.new_int_var(
             0, 10_000_000, "night_before_bag_drop_total"
         )
-        m.Add(self.night_before_bag_drop_total == sum(night_before_bag_drop_terms))
+        m.add(self.night_before_bag_drop_total == sum(night_before_bag_drop_terms))
         pen = round(self.p.pref_penalty_miles * SCALE)
         bag_drop_pen = round(self.p.bag_night_before_drop_penalty_miles * SCALE)
 
@@ -808,7 +808,7 @@ class _Model:
             + 10 * bag_drop_pen * self.night_before_bag_drop_total
             + fw * self.max_burden
         )
-        self.m.Minimize(
+        self.m.minimize(
             CARGO_TIEBREAKER_WEIGHT * primary_objective + self.cargo_motion_total
         )
 
@@ -853,10 +853,10 @@ class _Model:
                     # a next-morning leg is a chore only if the driver was home
                     # tonight (had to go back out); an overnighter driving home is
                     # just their own return
-                    both = m.NewBoolVar(f"chore_{p.id}_{owner_id}_{k}_{a}{b}")
-                    m.Add(both <= dv)
-                    m.Add(both <= ht)
-                    m.Add(both >= dv + ht - 1)
+                    both = m.new_bool_var(f"chore_{p.id}_{owner_id}_{k}_{a}{b}")
+                    m.add(both <= dv)
+                    m.add(both <= ht)
+                    m.add(both >= dv + ht - 1)
                     terms.append(chore * both)
             for o in self.owners:
                 if o.id == p.id:
@@ -871,16 +871,16 @@ class _Model:
                         if k in NIGHT_BEFORE:
                             terms.append(chore * ride)
                         elif k >= T_BIKEBACK:
-                            both = m.NewBoolVar(f"passenger_chore_{p.id}_{o.id}_{k}_{a}{b}")
-                            m.Add(both <= ride)
-                            m.Add(both <= owner_ht)
-                            m.Add(both >= ride + owner_ht - 1)
+                            both = m.new_bool_var(f"passenger_chore_{p.id}_{o.id}_{k}_{a}{b}")
+                            m.add(both <= ride)
+                            m.add(both <= owner_ht)
+                            m.add(both >= ride + owner_ht - 1)
                             terms.append(chore * both)
-            bvar = m.NewIntVar(0, 10_000_000, f"burden_{p.id}")
-            m.Add(bvar == sum(terms))
+            bvar = m.new_int_var(0, 10_000_000, f"burden_{p.id}")
+            m.add(bvar == sum(terms))
             self.burden[p.id] = bvar
-        self.max_burden = m.NewIntVar(0, 10_000_000, "max_burden")
-        m.AddMaxEquality(self.max_burden, list(self.burden.values()))
+        self.max_burden = m.new_int_var(0, 10_000_000, "max_burden")
+        m.add_max_equality(self.max_burden, list(self.burden.values()))
 
 
 # --------------------------------------------------------------------------- #
@@ -893,7 +893,7 @@ def solve(problem: Problem, time_limit_s: float = 20.0) -> Solution:
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_s
     solver.parameters.num_search_workers = 8
-    status = solver.Solve(mb.m)
+    status = solver.solve(mb.m)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return Solution(
@@ -975,14 +975,14 @@ def _extract(problem, mb, solver, status) -> Solution:
     sol = Solution(status="optimal" if status == cp_model.OPTIMAL else "feasible")
     # total driving = base car legs + approximate pickup detours (not the
     # preference penalty, which isn't real miles)
-    sol.total_drive_miles = round(solver.Value(mb.dist_total) / SCALE, 1)
+    sol.total_drive_miles = round(solver.value(mb.dist_total) / SCALE, 1)
 
     # return outcomes (riders and supporters alike)
     deviations = 0
     for p in problem.people:
-        if solver.Value(mb.home_tonight[p.id]):
+        if solver.value(mb.home_tonight[p.id]):
             opt = ReturnOption.DRIVE_HOME_TONIGHT
-        elif solver.Value(mb.opt_bikeback[p.id]):
+        elif solver.value(mb.opt_bikeback[p.id]):
             opt = ReturnOption.HOTEL_BIKE_BACK
         else:
             opt = ReturnOption.HOTEL_RIDE_HOME
@@ -995,10 +995,10 @@ def _extract(problem, mb, solver, status) -> Solution:
     for p in problem.people:
         drive_units = 0
         chore_legs = 0
-        home_tonight = bool(solver.Value(mb.home_tonight[p.id]))
+        home_tonight = bool(solver.value(mb.home_tonight[p.id]))
         # legs this person actually drives (own car or a household car)
         for (driver_id, owner_id, k, a, b), dv in mb.drives.items():
-            if driver_id != p.id or not solver.Value(dv):
+            if driver_id != p.id or not solver.value(dv):
                 continue
             owner = mb.by_id[owner_id]
             drive_units += round(_arc_distance(owner.home_zip, route, a, b) * SCALE)
@@ -1011,21 +1011,21 @@ def _extract(problem, mb, solver, status) -> Solution:
         for o in mb.owners:
             if o.id == p.id:
                 continue
-            owner_home_tonight = bool(solver.Value(mb.home_tonight[o.id]))
+            owner_home_tonight = bool(solver.value(mb.home_tonight[o.id]))
             for k in range(NK):
                 for (a, b) in ALLOWED_ARCS[k]:
                     key = (p.id, o.id, k, a, b)
-                    if key not in mb.incar or not solver.Value(mb.incar[key]):
+                    if key not in mb.incar or not solver.value(mb.incar[key]):
                         continue
                     if k in NIGHT_BEFORE or (k >= T_BIKEBACK and owner_home_tonight):
                         chore_legs += 1
         sol.burdens[p.id] = {
-            "total": round(solver.Value(mb.burden[p.id]) / SCALE, 1),
+            "total": round(solver.value(mb.burden[p.id]) / SCALE, 1),
             "drive_miles": round(drive_units / SCALE, 1),
             "chore_legs": chore_legs,
-            "deviation": bool(solver.Value(mb.deviation[p.id])),
+            "deviation": bool(solver.value(mb.deviation[p.id])),
         }
-    sol.max_burden = round(solver.Value(mb.max_burden) / SCALE, 1)
+    sol.max_burden = round(solver.value(mb.max_burden) / SCALE, 1)
 
     # per-person itinerary
     for p in problem.people:
@@ -1035,7 +1035,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                 # self-powered bicycle? (own bike or a loaner)
                 for owner_id in mb.bike_owners_for_rider.get(p.id, ()):
                     bself = mb.bike_self.get((p.id, owner_id, k, a, b))
-                    if bself is None or not solver.Value(bself):
+                    if bself is None or not solver.value(bself):
                         continue
                     verb = "Ride the route" if (a, b) == (S, F) else "Bike back"
                     bike = (
@@ -1047,7 +1047,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                     if (
                         k == T_BIKEBACK
                         and p.bag_count > 0
-                        and solver.Value(mb.opt_bikeback[p.id])
+                        and solver.value(mb.opt_bikeback[p.id])
                     ):
                         bag_word = "bag" if p.bag_count == 1 else "bags"
                         bag = (
@@ -1061,7 +1061,7 @@ def _extract(problem, mb, solver, status) -> Solution:
                     )
                 for o in mb.owners:
                     key = (p.id, o.id, k, a, b)
-                    if key in mb.incar and solver.Value(mb.incar[key]):
+                    if key in mb.incar and solver.value(mb.incar[key]):
                         # filter on *this person's* own travel, not the driver's
                         if _arc_distance(p.home_zip, route, a, b) < ZERO_MI:
                             continue  # 0-mile no-op (they live at this endpoint)
@@ -1087,14 +1087,14 @@ def _extract(problem, mb, solver, status) -> Solution:
     for o in mb.owners:
         for k in range(NK):
             for (a, b) in ALLOWED_ARCS[k]:
-                if solver.Value(mb.cmove[o.id, k, a, b]):
+                if solver.value(mb.cmove[o.id, k, a, b]):
                     driver_id = _leg_driver_id(mb, solver, o.id, k, a, b)
                     passengers = [
                         mb.by_id[p.id].name
                         for p in problem.people
                         if p.id != driver_id
                         and (p.id, o.id, k, a, b) in mb.incar
-                        and solver.Value(mb.incar[p.id, o.id, k, a, b])
+                        and solver.value(mb.incar[p.id, o.id, k, a, b])
                     ]
                     bikes = 0
                     bike_parts = []
@@ -1103,12 +1103,12 @@ def _extract(problem, mb, solver, status) -> Solution:
                     for ob in problem.people:
                         key = (ob.id, o.id, k, a, b)
                         if key in mb.bincar:
-                            count = solver.Value(mb.bincar[key])
+                            count = solver.value(mb.bincar[key])
                             bikes += count
                             if count:
                                 bike_parts.append(_bike_cargo_label(mb, ob, count))
                         if key in mb.gincar:
-                            gcount = solver.Value(mb.gincar[key])
+                            gcount = solver.value(mb.gincar[key])
                             bags += gcount
                             if gcount:
                                 bag_word = "bag" if gcount == 1 else "bags"
@@ -1162,14 +1162,14 @@ def _extract(problem, mb, solver, status) -> Solution:
     for ob in problem.people:
         if ob.bag_count <= 0:
             continue
-        if ob.id in mb.home_tonight and solver.Value(mb.home_tonight[ob.id]):
+        if ob.id in mb.home_tonight and solver.value(mb.home_tonight[ob.id]):
             continue  # went home that night — the bag was never needed at the finish
         carrier = None
         for o in mb.owners:
             for k in range(NK):
                 for (a, b) in ALLOWED_ARCS[k]:
                     key = (ob.id, o.id, k, a, b)
-                    if b == F and key in mb.gincar and solver.Value(mb.gincar[key]) > 0:
+                    if b == F and key in mb.gincar and solver.value(mb.gincar[key]) > 0:
                         carrier = o
         if carrier is None:
             continue
@@ -1191,9 +1191,9 @@ def _extract(problem, mb, solver, status) -> Solution:
                     key = (ob.id, o.id, k, a, b)
                     if ob.id == o.id or key not in mb.bincar:
                         continue
-                    if solver.Value(mb.bincar[key]) <= 0:
+                    if solver.value(mb.bincar[key]) <= 0:
                         continue
-                    owner_along = (ob.id, o.id, k, a, b) in mb.incar and solver.Value(
+                    owner_along = (ob.id, o.id, k, a, b) in mb.incar and solver.value(
                         mb.incar[ob.id, o.id, k, a, b]
                     )
                     if owner_along:
@@ -1267,7 +1267,7 @@ def _vehicle_bike_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: s
         key = (owner.id, car_owner_id, k, a, b)
         if key not in mb.bincar:
             continue
-        count = solver.Value(mb.bincar[key])
+        count = solver.value(mb.bincar[key])
         bikes += count
         if count:
             bike_parts.append(_bike_cargo_label(mb, owner, count))
@@ -1280,7 +1280,7 @@ def _leg_driver_id(mb, solver, owner_id: str, k: int, a: str, b: str) -> str:
     """Who actually drives ``owner_id``'s car on this leg (a household member may)."""
     for hm in mb.people:
         dv = mb.drives.get((hm.id, owner_id, k, a, b))
-        if dv is not None and solver.Value(dv):
+        if dv is not None and solver.value(dv):
             return hm.id
     return owner_id
 
@@ -1294,7 +1294,7 @@ def _vehicle_people_text(mb, solver, car_owner_id: str, k: int, a: str, b: str) 
         for p in mb.people
         if p.id != driver_id
         and (p.id, car_owner_id, k, a, b) in mb.incar
-        and solver.Value(mb.incar[p.id, car_owner_id, k, a, b])
+        and solver.value(mb.incar[p.id, car_owner_id, k, a, b])
     ]
     if riders:
         return f"people: {driver} (driver), " + ", ".join(riders)
@@ -1309,7 +1309,7 @@ def _vehicle_bag_cargo_text(mb, solver, car_owner_id: str, k: int, a: str, b: st
         key = (owner.id, car_owner_id, k, a, b)
         if key not in mb.gincar:
             continue
-        count = solver.Value(mb.gincar[key])
+        count = solver.value(mb.gincar[key])
         bags += count
         if count:
             bag_word = "bag" if count == 1 else "bags"
