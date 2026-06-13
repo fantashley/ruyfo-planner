@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import select
@@ -832,6 +833,75 @@ def delete_participant(event_id: int, pid: int):
             s.delete(p)
             s.commit()
     return RedirectResponse(f"/events/{event_id}", status_code=303)
+
+
+def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
+    """Serialize an event + roster into the ``fixtures/*.json`` schema."""
+    id_to_name = {str(p.id): p.name for p in people}
+    group_of = {p.id: (p.household or str(p.id)) for p in people}
+    group_size: dict[str, int] = {}
+    for g in group_of.values():
+        group_size[g] = group_size.get(g, 0) + 1
+
+    participants = []
+    for p in people:
+        entry: dict[str, Any] = {"name": p.name, "home_zip": p.home_zip}
+        if p.email:
+            entry["email"] = p.email
+        group = group_of[p.id]
+        if group_size[group] > 1 and group in id_to_name:
+            # a shared label all household members agree on (round-trips by name)
+            entry["household"] = id_to_name[group]
+        entry["is_rider"] = p.is_rider
+        if p.is_rider:
+            entry["num_bikes"] = p.num_bikes
+        loaners = [id_to_name[i] for i in p.loaner_for.split(",") if i in id_to_name]
+        if loaners:
+            entry["loaner_for"] = loaners
+        if p.bag_count:
+            entry["bag_count"] = p.bag_count
+        if p.car_combos:
+            entry["car_combos"] = p.car_combos
+        elif p.has_car:
+            entry["has_car"] = True
+        for flag in (
+            "willing_drop_car", "willing_drop_bikes_at_start",
+            "willing_drive_dropper_home", "can_drive_morning",
+            "is_sag_driver", "share_household_car",
+        ):
+            if getattr(p, flag):
+                entry[flag] = True
+        if p.is_sag_driver and p.sag_extra_miles != 20:
+            entry["sag_extra_miles"] = p.sag_extra_miles
+        entry["return"] = {
+            "tonight": p.pref_tonight,
+            "bikeback": p.pref_bikeback,
+            "ridehome": p.pref_ridehome,
+        }
+        participants.append(entry)
+
+    return {
+        "event": {"name": ev.name, "route_key": ev.route_key, "has_sag": ev.has_sag},
+        "participants": participants,
+    }
+
+
+@app.get("/events/{event_id}/export")
+def export_fixture(event_id: int):
+    with get_session() as s:
+        ev = s.get(Event, event_id)
+        if ev is None:
+            return RedirectResponse("/", status_code=303)
+        people = s.exec(
+            select(Participant).where(Participant.event_id == event_id)
+        ).all()
+    body = json.dumps(_fixture_dict(ev, people), indent=2)
+    slug = re.sub(r"[^a-z0-9]+", "_", ev.name.lower()).strip("_") or "roster"
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{slug}.json"'},
+    )
 
 
 @app.get("/events/{event_id}/plan", response_class=HTMLResponse)

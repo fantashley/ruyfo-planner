@@ -39,7 +39,10 @@
     <p class="muted">No participants yet.</p>
     {% endif %}
 
-    <p><a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a></p>
+    <p>
+      <a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a>
+      {% if people %}<a class="button" href="/events/{{ event.id }}/export">Export fixture</a>{% endif %}
+    </p>
   </section>
 
   <section class="card">
