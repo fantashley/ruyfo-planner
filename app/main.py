@@ -68,9 +68,11 @@ def _return_short(value: ReturnOption) -> str:
 
 
 def _burden_summary(burden: dict[str, Any] | None) -> str:
+    # The "eq-mi" total is an internal weighting detail; surface only the
+    # concrete, human-meaningful pieces of a person's load.
     if not burden:
         return ""
-    parts = [f"{burden['total']:.0f} eq-mi"]
+    parts = []
     if burden.get("drive_miles", 0):
         parts.append(f"{burden['drive_miles']:.0f} mi driving")
     if burden.get("chore_legs", 0):
@@ -80,7 +82,7 @@ def _burden_summary(burden: dict[str, Any] | None) -> str:
         )
     if burden.get("deviation"):
         parts.append("backup return")
-    return " · ".join(parts)
+    return " · ".join(parts) if parts else "No driving or chores"
 
 
 def _cargo_summary(cargo: str) -> str:
@@ -490,6 +492,15 @@ PHASE_GROUP_ICON = {
     "Next morning": "sun",
 }
 
+# Time-anchored section headers so the timeline reads unambiguously in order.
+PHASE_GROUP_LABEL = {
+    "Night before": "The night before",
+    "Morning of the ride": "Morning of the ride",
+    "The ride": "The ride",
+    "Evening": "The evening after the ride",
+    "Next morning": "The next morning",
+}
+
 
 def _initials(name: str) -> str:
     parts = [p for p in re.split(r"\s+", name.strip()) if p]
@@ -606,6 +617,7 @@ def _glance_groups(moves: list[str], route: Route | None = None) -> list[dict[st
             groups.append(
                 {
                     "group": group,
+                    "label": PHASE_GROUP_LABEL.get(group, group),
                     "icon": PHASE_GROUP_ICON.get(group, "route"),
                     "legs": [],
                 }
@@ -845,6 +857,11 @@ def plan_page(request: Request, event_id: int):
     )
     solution = solve(problem)
     by_id = {str(p.id): p for p in people}
+    sag_driver = (
+        next((p.name for p in people if p.is_sag_driver), None)
+        if ev.has_sag
+        else None
+    )
     return templates.TemplateResponse(
         request,
         "plan.html",
@@ -854,6 +871,7 @@ def plan_page(request: Request, event_id: int):
             "solution": solution,
             "people": people,
             "by_id": by_id,
+            "sag_driver": sag_driver,
             "empty": False,
         },
     )

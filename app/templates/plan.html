@@ -22,11 +22,12 @@
   <symbol id="i-sun" viewBox="0 0 24 24"><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1"/><path d="M20 12h1"/><path d="M12 3v1"/><path d="M12 20v1"/><path d="M5.6 5.6l.7 .7"/><path d="M17.7 17.7l.7 .7"/><path d="M5.6 18.4l.7 -.7"/><path d="M17.7 6.3l.7 -.7"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/></symbol>
   <symbol id="i-sunset" viewBox="0 0 24 24"><path d="M3 17h1"/><path d="M20 17h1"/><path d="M6.6 11.6l.7 .7"/><path d="M16.7 12.3l.7 -.7"/><path d="M12 9v-6"/><path d="M9 6l3 3l3 -3"/><path d="M8 17a4 4 0 1 1 8 0"/><path d="M3 21h18"/></symbol>
+  <symbol id="i-bus" viewBox="0 0 24 24"><path d="M6 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M18 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 17h-2v-11a1 1 0 0 1 1 -1h14a5 7 0 0 1 5 7v5h-2m-4 0h-8"/><path d="M16 5l1.5 7l4.5 0"/><path d="M2 10h15"/></symbol>
 </svg>
 
 <p><a href="/events/{{ event.id }}">← Back to {{ event.name }}</a></p>
 <h1>Logistics plan</h1>
-<p class="muted">{{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}</p>
+<p class="muted">{{ route.name }}</p>
 
 {% if empty %}
   <p class="error">Add some participants first.</p>
@@ -38,7 +39,6 @@
 {% else %}
   <div class="summary">
     <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>{{ icon('route') }} total drive miles</span></div>
-    <div class="stat"><b>{{ "%.0f"|format(solution.max_burden) }}</b><span>{{ icon('user') }} heaviest burden</span></div>
     <div class="stat"><b>{{ solution.pref_deviations }}</b><span>{{ icon('arrow') }} on a backup return</span></div>
     <div class="stat"><b>{{ solution.status }}</b><span>{{ icon('check') }} solution</span></div>
   </div>
@@ -59,13 +59,13 @@
   <div class="glance">
     {% for group in solution.car_moves|glance_groups(route) %}
       <div class="glance-group">
-        <div class="group-head">{{ icon(group.icon) }}{{ group.group }}</div>
+        <div class="group-head">{{ icon(group.icon) }}{{ group.label }}</div>
         <div class="legs">
           {% for leg in group.legs %}
           <div class="leg">
             <div class="leg-main">
               <div class="leg-route">
-                {% if leg.driver %}{{ avatar(leg.driver, 'driver') }}<span class="driver-name">{{ leg.driver.name }}</span>{% endif %}
+                {% if leg.driver %}{{ avatar(leg.driver, 'driver') }}<span class="driver-name">{{ leg.driver.name }}</span>{% if sag_driver and leg.driver.name == sag_driver %}<span class="sag-badge">{{ icon('bus') }}SAG wagon</span>{% endif %}{% endif %}
                 {{ locpill(leg.origin) }}
                 {% if leg.origin and leg.dest %}{{ icon('arrow') }}{% endif %}
                 {{ locpill(leg.dest) }}
@@ -143,14 +143,10 @@
 
       {% if sid in solution.burdens %}
         {% set b = solution.burdens[sid] %}
-        {% set is_max = b.total and b.total == solution.max_burden %}
         {% set pct = (b.total / solution.max_burden * 100) if solution.max_burden else 0 %}
         <div class="burden-row">
-          <div class="burden-meta">
-            <span>{{ b|burden_summary }}</span>
-            {% if is_max %}<span class="tag-max">heaviest load</span>{% endif %}
-          </div>
-          <div class="bar"><div class="bar-fill{{ ' bar-max' if is_max }}" style="width: {{ "%.0f"|format(pct) }}%"></div></div>
+          <div class="burden-meta"><span>{{ b|burden_summary }}</span></div>
+          <div class="bar"><div class="bar-fill" style="width: {{ "%.0f"|format(pct) }}%"></div></div>
         </div>
       {% endif %}
 

@@ -75,7 +75,7 @@ table.roster th, table.roster td { text-align: left; padding: 8px; border-bottom
 .event-list { list-style: none; padding: 0; }
 .event-list li { padding: 10px 0; border-bottom: 1px solid var(--line); }
 
-.summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+.summary { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 12px; margin: 16px 0 24px; }
 .stat { background: #fff; border: 1px solid var(--line); border-radius: 8px;
   padding: 16px 22px; text-align: center; min-width: 120px; }
 .stat b { display: block; font-size: 28px; color: var(--accent); }
@@ -137,6 +137,10 @@ table.roster th, table.roster td { text-align: left; padding: 8px; border-bottom
 .leg-route { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .leg-route .driver-name { font-weight: 600; }
 .leg-route > .ic { color: var(--muted); }
+.sag-badge { display: inline-flex; align-items: center; gap: 4px;
+  background: #faeeda; color: #854f0b; font-size: 12px;
+  font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.sag-badge .ic { font-size: 14px; }
 .leg-cargo { margin-left: auto; display: flex; gap: 12px;
   color: var(--muted); font-size: 13px; font-weight: 600; }
 .leg-cargo span { display: inline-flex; align-items: center; gap: 4px; }
@@ -162,13 +166,9 @@ table.roster th, table.roster td { text-align: left; padding: 8px; border-bottom
 .journey .hop { display: inline-flex; color: var(--muted); }
 .journey .hop .ic { font-size: 16px; }
 
-.burden-meta { display: flex; justify-content: space-between; align-items: center;
-  gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
-.tag-max { background: #fef2f2; color: var(--danger); font-weight: 600;
-  border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+.burden-meta { font-size: 13px; color: var(--muted); margin-bottom: 5px; }
 .bar { height: 7px; background: var(--bg); border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
-.bar-fill.bar-max { background: var(--danger); }
 
 .person ol { margin: 0; padding-left: 20px; }
 .person li { margin: 5px 0; }
