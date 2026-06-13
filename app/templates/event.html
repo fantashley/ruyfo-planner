@@ -39,7 +39,10 @@
     <p class="muted">No participants yet.</p>
     {% endif %}
 
-    <p><a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a></p>
+    <p>
+      <a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a>
+      {% if people %}<a class="button" href="/events/{{ event.id }}/export">Export fixture</a>{% endif %}
+    </p>
   </section>
 
   <section class="card">
@@ -62,8 +65,8 @@
 
       <fieldset>
         <legend>Riding &amp; gear</legend>
-        <label class="check"><input type="checkbox" name="is_rider" checked> I'm riding the route</label>
-        <label>Bikes I'll ride
+        <label class="check"><input type="checkbox" name="is_rider" id="is_rider" checked> I'm riding the route</label>
+        <label id="bikes-field">Bikes I'll ride
           <input name="num_bikes" type="number" min="0" value="1">
           <small class="muted">Your own bike(s) only — don't count loaners you bring
           for others (add those below). Set 0 if you'll ride a borrowed loaner.</small>
@@ -76,9 +79,8 @@
           </select>
           <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers first.</small>
         </label>
-        <label>Overnight bags to get to the hotel
-          <input name="bag_count" type="number" min="0" value="0">
-        </label>
+        <label class="check" id="bag-field"><input type="checkbox" name="has_overnight_bag">
+          I'll have an overnight bag if I stay the night</label>
       </fieldset>
 
       <fieldset>
@@ -98,8 +100,13 @@
         <label class="check"><input type="checkbox" name="share_household_car">
           Pool cars with my household (we can drive each other's cars)</label>
         {% if event.has_sag %}
-        <label class="check"><input type="checkbox" name="is_sag_driver">
+        <label class="check"><input type="checkbox" name="is_sag_driver" id="is_sag_driver">
           I'll drive the SAG wagon</label>
+        <label id="sag-extra-field">Extra SAG miles I'll drive beyond my own route
+          <input name="sag_extra_miles" type="number" min="0" value="20">
+          <small class="muted">The SAG only has to sweep start→finish and get itself home.
+          This is how far past that you'll go for extra ferrying or backtracks.</small>
+        </label>
         {% endif %}
       </fieldset>
 
@@ -124,4 +131,37 @@
     </form>
   </section>
 </div>
+
+<script>
+(function () {
+  function toggle(el, show) { if (el) el.style.display = show ? "" : "none"; }
+
+  var rider = document.getElementById("is_rider");
+  var bikes = document.getElementById("bikes-field");
+  if (rider && bikes) {
+    var syncRider = function () { toggle(bikes, rider.checked); };
+    rider.addEventListener("change", syncRider); syncRider();
+  }
+
+  var sag = document.getElementById("is_sag_driver");
+  var sagExtra = document.getElementById("sag-extra-field");
+  if (sag && sagExtra) {
+    var syncSag = function () { toggle(sagExtra, sag.checked); };
+    sag.addEventListener("change", syncSag); syncSag();
+  }
+
+  var bag = document.getElementById("bag-field");
+  var bikeback = document.querySelector('select[name="pref_bikeback"]');
+  var ridehome = document.querySelector('select[name="pref_ridehome"]');
+  if (bag) {
+    var syncBag = function () {
+      var staying = (bikeback && bikeback.value !== "unwilling") ||
+                    (ridehome && ridehome.value !== "unwilling");
+      toggle(bag, staying);
+    };
+    [bikeback, ridehome].forEach(function (s) { if (s) s.addEventListener("change", syncBag); });
+    syncBag();
+  }
+})();
+</script>
 {% endblock %}

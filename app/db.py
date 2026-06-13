@@ -18,6 +18,7 @@ _SQLITE_SCHEMA_ADDITIONS = {
         "loaner_for": "VARCHAR NOT NULL DEFAULT ''",
         "bag_count": "INTEGER NOT NULL DEFAULT 0",
         "share_household_car": "BOOLEAN NOT NULL DEFAULT 0",
+        "sag_extra_miles": "INTEGER NOT NULL DEFAULT 20",
     },
 }
 

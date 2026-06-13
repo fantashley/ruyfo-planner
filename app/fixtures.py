@@ -87,6 +87,7 @@ def build_problem(fixture: dict) -> Problem:
                 can_drive_morning=p.get("can_drive_morning", False),
                 is_sag_driver=p.get("is_sag_driver", False),
                 share_household_car=p.get("share_household_car", False),
+                sag_extra_miles=p.get("sag_extra_miles", 20),
                 return_prefs={opt: Pref(ret[k]) for k, opt in _RETURN_KEYS.items()},
             )
         )
@@ -152,6 +153,7 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
                 can_drive_morning=p.get("can_drive_morning", False),
                 is_sag_driver=p.get("is_sag_driver", False),
                 share_household_car=p.get("share_household_car", False),
+                sag_extra_miles=p.get("sag_extra_miles", 20),
                 pref_tonight=ret["tonight"],
                 pref_bikeback=ret["bikeback"],
                 pref_ridehome=ret["ridehome"],

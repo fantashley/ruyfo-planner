@@ -206,6 +206,9 @@ details summary { color: var(--accent); cursor: pointer; font-weight: 700; }
 }
 [data-tip]:hover::after, [data-tip]:hover::before,
 [data-tip]:focus-visible::after, [data-tip]:focus-visible::before { opacity: 1; }
+/* multi-line, left-aligned tooltip (e.g. the unmet-preferences list) */
+.tip-wrap { cursor: help; }
+.tip-wrap[data-tip]::after { white-space: pre-line; max-width: 280px; text-align: left; }
 
 /* per-leg cargo ownership inside Details */
 .cargo-line { display: flex; align-items: flex-start; gap: 8px;

@@ -39,7 +39,7 @@
 {% else %}
   <div class="summary">
     <div class="stat"><b>{{ "%.0f"|format(solution.total_drive_miles) }}</b><span>{{ icon('route') }} total drive miles</span></div>
-    <div class="stat"><b>{{ solution.pref_deviations }}</b><span>{{ icon('arrow') }} on a backup return</span></div>
+    <div class="stat{% if unmet_count %} tip-wrap{% endif %}"{% if unmet_count %} data-tip="{{ unmet_tip }}"{% endif %}><b>{{ unmet_count }}</b><span>{{ icon('arrow') }} unmet preference{{ "s" if unmet_count != 1 }}</span></div>
     <div class="stat"><b>{{ solution.status }}</b><span>{{ icon('check') }} solution</span></div>
   </div>
 
