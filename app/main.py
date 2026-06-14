@@ -1161,9 +1161,14 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
     """Serialize an event + roster into the ``fixtures/*.json`` schema."""
     id_to_name = {str(p.id): p.name for p in people}
     group_of = {p.id: (p.household or str(p.id)) for p in people}
-    group_size: dict[str, int] = {}
-    for g in group_of.values():
-        group_size[g] = group_size.get(g, 0) + 1
+    members: dict[str, list[str]] = {}
+    for p in people:
+        members.setdefault(group_of[p.id], []).append(p.name)
+    # one representative name per household, so groupings round-trip by name
+    # regardless of how the key was stored (participant id or arbitrary label)
+    group_label = {
+        g: id_to_name.get(g) or min(names) for g, names in members.items()
+    }
 
     participants = []
     for p in people:
@@ -1171,9 +1176,9 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
         if p.email:
             entry["email"] = p.email
         group = group_of[p.id]
-        if group_size[group] > 1 and group in id_to_name:
+        if len(members[group]) > 1:
             # a shared label all household members agree on (round-trips by name)
-            entry["household"] = id_to_name[group]
+            entry["household"] = group_label[group]
         entry["is_rider"] = p.is_rider
         if p.is_rider:
             entry["num_bikes"] = p.num_bikes
