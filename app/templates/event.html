@@ -54,12 +54,18 @@
           </td>
           <td>{% if p.has_car %}<span class="badge soft">{{ p.car_combos or "5x2" }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="roster-actions">
-            {% if can_manage_event %}
-            <form method="post" action="{{ event_url('/participants/' ~ p.id ~ '/delete') }}">
-              <button class="roster-remove" type="submit" title="Remove {{ p.name }}"
-                      aria-label="Remove {{ p.name }}">×</button>
-            </form>
-            {% endif %}
+            <span class="roster-action-row">
+              {% if can_add_participants %}
+              <a class="roster-edit" href="{{ event_url('?edit=' ~ p.id) }}#participant-form"
+                 title="Edit {{ p.name }}" aria-label="Edit {{ p.name }}">Edit</a>
+              {% endif %}
+              {% if can_manage_event %}
+              <form method="post" action="{{ event_url('/participants/' ~ p.id ~ '/delete') }}">
+                <button class="roster-remove" type="submit" title="Remove {{ p.name }}"
+                        aria-label="Remove {{ p.name }}">×</button>
+              </form>
+              {% endif %}
+            </span>
           </td>
         </tr>
       {% endfor %}
@@ -110,21 +116,22 @@
   </section>
 
   {% if can_add_participants %}
-  <section class="card">
+  <section class="card" id="participant-form">
     <div class="section-head compact">
-      <h2>Add a participant</h2>
-      <span class="muted">person, bike, car</span>
+      <h2>{{ "Edit participant" if editing else "Add a participant" }}</h2>
+      {% if editing %}<a class="muted" href="{{ event_url() }}">cancel</a>
+      {% else %}<span class="muted">person, bike, car</span>{% endif %}
     </div>
-    <form method="post" action="{{ event_url('/participants') }}">
+    <form method="post" action="{{ event_url('/participants/' ~ editing.id ~ '/update') if editing else event_url('/participants') }}">
       <div class="grid2">
-        <label>Name <input name="name" required></label>
-        <label>Email <input name="email" type="email"></label>
-        <label>Home ZIP <input name="home_zip" pattern="[0-9]{5}" required></label>
+        <label>Name <input name="name" required value="{{ editing.name if editing else '' }}"></label>
+        <label>Email <input name="email" type="email" value="{{ editing.email if editing else '' }}"></label>
+        <label>Home ZIP <input name="home_zip" pattern="[0-9]{5}" required value="{{ editing.home_zip if editing else '' }}"></label>
         <label>Same household as
           <select name="household">
             <option value="">— just me —</option>
-            {% for q in people %}
-            <option value="{{ q.id }}">{{ q.name }}</option>
+            {% for q in people if not editing or q.id != editing.id %}
+            <option value="{{ q.id }}"{% if editing and (q.id|string) == editing_household_pick %} selected{% endif %}>{{ q.name }}</option>
             {% endfor %}
           </select>
           <small class="muted">Pick someone already added to share a home/cars with them.</small>
@@ -133,52 +140,52 @@
 
       <fieldset>
         <legend>Riding &amp; gear</legend>
-        <label class="check"><input type="checkbox" name="is_rider" id="is_rider" checked> I'm riding the route</label>
+        <label class="check"><input type="checkbox" name="is_rider" id="is_rider"{% if not editing or editing.is_rider %} checked{% endif %}> I'm riding the route</label>
         <label id="bikes-field">Bikes I'll ride
-          <input name="num_bikes" type="number" min="0" value="1">
+          <input name="num_bikes" type="number" min="0" value="{{ editing.num_bikes if editing else 1 }}">
           <small class="muted">Your own bike(s) only — don't count loaners you bring
           for others (add those below). Set 0 if you'll ride a borrowed loaner.</small>
         </label>
         <label>I'm bringing spare/loaner bikes for
           <select name="loaner_for" multiple size="3">
-            {% for q in people if q.is_rider %}
-            <option value="{{ q.id }}">{{ q.name }}</option>
+            {% for q in people if q.is_rider and (not editing or q.id != editing.id) %}
+            <option value="{{ q.id }}"{% if editing and (q.id|string) in editing.loaner_for.split(",") %} selected{% endif %}>{{ q.name }}</option>
             {% endfor %}
           </select>
           <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers (riders) first.</small>
         </label>
         {% if event.has_sag %}
-        <label class="check" id="join-field"><input type="checkbox" name="joins_ride" id="joins_ride">
+        <label class="check" id="join-field"><input type="checkbox" name="joins_ride" id="joins_ride"{% if editing and editing.joins_ride %} checked{% endif %}>
           I'm not riding, but I'm joining the ride in the SAG wagon</label>
         {% endif %}
-        <label class="check" id="bag-field"><input type="checkbox" name="has_overnight_bag">
+        <label class="check" id="bag-field"><input type="checkbox" name="has_overnight_bag"{% if editing and editing.bag_count %} checked{% endif %}>
           I'll have an overnight bag if I stay the night</label>
       </fieldset>
 
       <fieldset>
         <legend>Car <small class="muted">(fill in if you have one to use for logistics)</small></legend>
         <label>Capacity combos
-          <input name="car_combos" placeholder="5x2, 2x4">
+          <input name="car_combos" placeholder="5x2, 2x4" value="{{ editing.car_combos if editing else '' }}">
           <small class="muted">people × bikes, comma-separated. Leave blank if no car; default 5×2.</small>
         </label>
-        <label class="check"><input type="checkbox" name="can_drive_morning">
+        <label class="check"><input type="checkbox" name="can_drive_morning"{% if editing and editing.can_drive_morning %} checked{% endif %}>
           Can drive people to the start the morning of</label>
-        <label class="check"><input type="checkbox" name="willing_drop_car" id="willing_drop_car">
+        <label class="check"><input type="checkbox" name="willing_drop_car" id="willing_drop_car"{% if editing and editing.willing_drop_car %} checked{% endif %}>
           Willing to drop my car at the finish the night before</label>
-        <label class="check"><input type="checkbox" name="willing_drive_dropper_home">
+        <label class="check"><input type="checkbox" name="willing_drive_dropper_home"{% if editing and editing.willing_drive_dropper_home %} checked{% endif %}>
           Willing to drive a car-dropper home the night before</label>
-        <label class="check"><input type="checkbox" name="willing_drop_bikes_at_start">
+        <label class="check"><input type="checkbox" name="willing_drop_bikes_at_start"{% if editing and editing.willing_drop_bikes_at_start %} checked{% endif %}>
           Willing to shuttle bikes to the start the night before</label>
-        <label class="check"><input type="checkbox" name="share_household_car">
+        <label class="check"><input type="checkbox" name="share_household_car"{% if editing and editing.share_household_car %} checked{% endif %}>
           Pool cars with my household (we can drive each other's cars)</label>
-        {% if sag_driver %}
+        {% if sag_driver and not (editing and editing.is_sag_driver) %}
         <p class="field-note"><span class="sag-badge compact">SAG</span>
           {{ sag_driver.name }} is driving the SAG wagon for this event.</p>
         {% else %}
-        <label class="check"><input type="checkbox" name="is_sag_driver" id="is_sag_driver">
+        <label class="check"><input type="checkbox" name="is_sag_driver" id="is_sag_driver"{% if editing and editing.is_sag_driver %} checked{% endif %}>
           I'll drive the SAG wagon</label>
         <label id="sag-extra-field">Extra SAG miles I'll drive beyond my own route
-          <input name="sag_extra_miles" type="number" min="0" value="20">
+          <input name="sag_extra_miles" type="number" min="0" value="{{ editing.sag_extra_miles if editing else 20 }}">
           <small class="muted">The SAG only has to sweep start→finish and get itself home.
           This is how far past that you'll go for extra ferrying or backtracks.</small>
         </label>
@@ -191,18 +198,19 @@
                        ("pref_bikeback", "Hotel, then bike back next morning"),
                        ("pref_ridehome", "Hotel, then ride home next morning")] %}
         {% for field, label in opts %}
+        {% set current = (editing|attr(field)) if editing else ("preferred" if field == "pref_tonight" else "acceptable") %}
         <div class="pref-row">
           <span>{{ label }}</span>
           <select name="{{ field }}">
-            <option value="preferred"{% if field == "pref_tonight" %} selected{% endif %}>preferred</option>
-            <option value="acceptable"{% if field != "pref_tonight" %} selected{% endif %}>acceptable</option>
-            <option value="unwilling">unwilling</option>
+            <option value="preferred"{% if current == "preferred" %} selected{% endif %}>preferred</option>
+            <option value="acceptable"{% if current == "acceptable" %} selected{% endif %}>acceptable</option>
+            <option value="unwilling"{% if current == "unwilling" %} selected{% endif %}>unwilling</option>
           </select>
         </div>
         {% endfor %}
       </fieldset>
 
-      <button type="submit">Add participant</button>
+      <button type="submit">{{ "Save changes" if editing else "Add participant" }}</button>
     </form>
   </section>
   {% endif %}

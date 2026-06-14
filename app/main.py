@@ -784,6 +784,7 @@ def _event_page_context(
     access: EventAccess,
     people: list[Participant],
     error: str | None = None,
+    editing: Participant | None = None,
 ) -> dict[str, Any]:
     ev = access.event
     route = get_route(ev.route_key)
@@ -795,6 +796,17 @@ def _event_page_context(
             if q.id != p.id and (q.household or str(q.id)) == key
         ]
         household_mates[p.id] = mates
+    # which "Same household as" option to pre-select when editing: a co-member
+    # of the edited person's household (the dropdown keys off participant ids)
+    editing_household_pick = ""
+    if editing and editing.household:
+        mate = next(
+            (q for q in people
+             if q.id != editing.id and (q.household or str(q.id)) == editing.household),
+            None,
+        )
+        if mate is not None:
+            editing_household_pick = str(mate.id)
     return {
         "request": request,
         "event": ev,
@@ -802,6 +814,8 @@ def _event_page_context(
         "people": people,
         "household_mates": household_mates,
         "sag_driver": _sag_driver(people),
+        "editing": editing,
+        "editing_household_pick": editing_household_pick,
         "error": error,
         "access_role": access.role,
         "can_add_participants": access.role in ("organizer", "participant"),
@@ -836,16 +850,120 @@ def event_page(request: Request, event_id: int, error: str | None = None):
 
 
 @app.get("/e/{token}", response_class=HTMLResponse)
-def event_token_page(request: Request, token: str, error: str | None = None):
+def event_token_page(
+    request: Request, token: str, error: str | None = None, edit: int | None = None
+):
     access = _resolve_event_access(token)
     if access is None:
         return RedirectResponse("/", status_code=303)
     people = _people_for_event(access.event.id)
+    editing = None
+    if edit is not None and access.role in ("organizer", "participant"):
+        editing = next((p for p in people if p.id == edit), None)
     return templates.TemplateResponse(
         request,
         "event.html",
-        _event_page_context(request, access, people, error),
+        _event_page_context(request, access, people, error, editing),
     )
+
+
+def _resolve_participant_form(
+    s,
+    ev: Event,
+    self_id: int | None,
+    *,
+    name: str,
+    email: str,
+    home_zip: str,
+    household: str,
+    is_rider: str | None,
+    joins_ride: str | None,
+    num_bikes: int,
+    loaner_for: list[str],
+    has_overnight_bag: str | None,
+    car_combos: str,
+    willing_drop_car: str | None,
+    willing_drop_bikes_at_start: str | None,
+    willing_drive_dropper_home: str | None,
+    can_drive_morning: str | None,
+    is_sag_driver: str | None,
+    share_household_car: str | None,
+    sag_extra_miles: int,
+    pref_tonight: str,
+    pref_bikeback: str,
+    pref_ridehome: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate + normalize add/edit form input into model fields.
+
+    Returns ``(fields, None)`` on success or ``(None, error_message)``.
+    ``self_id`` is the participant being edited (``None`` when adding); it is
+    excluded from the single-SAG-driver check and from household self-reference.
+    """
+    # validate the ZIP up front so we fail clearly rather than at solve time
+    try:
+        geo.latlon(home_zip)
+    except geo.UnknownZip:
+        return None, f"Unknown ZIP code {geo.normalize_zip(home_zip)}"
+
+    riding = _checkbox(is_rider)
+    sag = _checkbox(is_sag_driver)
+    if sag:
+        # only one person can drive the SAG wagon
+        existing = next(
+            (p for p in _people_for_event(ev.id) if p.is_sag_driver and p.id != self_id),
+            None,
+        )
+        if existing is not None:
+            return None, f"{existing.name} is already driving the SAG wagon — there can only be one."
+        # the SAG driver sweeps the route in their car, so they can't also ride it,
+        # and can't drop that car at the finish the night before
+        if riding:
+            return None, "A SAG wagon driver can't also ride the route."
+        if _checkbox(willing_drop_car):
+            return None, "A SAG driver needs their car for the sweep and can't drop it at the finish."
+
+    car_flags = [
+        willing_drop_car, willing_drop_bikes_at_start,
+        willing_drive_dropper_home, can_drive_morning, is_sag_driver,
+    ]
+    # a car is implied by entering capacity or checking any car-requiring box
+    has_car = bool(car_combos.strip()) or any(f is not None for f in car_flags)
+
+    # "household" is the id of an existing participant to share with; resolve to
+    # their household identifier so chains stay consistent
+    household_value = ""
+    if household:
+        try:
+            target = s.get(Participant, int(household))
+        except (ValueError, TypeError):
+            target = None
+        if target is not None and target.event_id == ev.id and target.id != self_id:
+            household_value = target.household or str(target.id)
+
+    return {
+        "name": name,
+        "email": email,
+        "home_zip": geo.normalize_zip(home_zip),
+        "household": household_value,
+        "is_rider": riding,
+        # joining the SAG only applies to non-riders
+        "joins_ride": _checkbox(joins_ride) and not riding,
+        "num_bikes": num_bikes if riding else 0,  # "bikes I'll ride" only applies to riders
+        "loaner_for": ",".join(b for b in loaner_for if b),
+        "bag_count": 1 if _checkbox(has_overnight_bag) else 0,
+        "has_car": has_car,
+        "car_combos": car_combos,
+        "willing_drop_car": _checkbox(willing_drop_car),
+        "willing_drop_bikes_at_start": _checkbox(willing_drop_bikes_at_start),
+        "willing_drive_dropper_home": _checkbox(willing_drive_dropper_home),
+        "can_drive_morning": _checkbox(can_drive_morning),
+        "is_sag_driver": sag,
+        "share_household_car": _checkbox(share_household_car),
+        "sag_extra_miles": sag_extra_miles,
+        "pref_tonight": pref_tonight,
+        "pref_bikeback": pref_bikeback,
+        "pref_ridehome": pref_ridehome,
+    }, None
 
 
 @app.post("/events/{event_id}/participants")
@@ -906,86 +1024,89 @@ def add_participant_token(
         return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
     ev = access.event
 
-    # validate the ZIP up front so we fail clearly rather than at solve time
-    try:
-        geo.latlon(home_zip)
-    except geo.UnknownZip:
-        return RedirectResponse(
-            f"{_event_path(ev, role=access.role)}?error=Unknown+ZIP+code+{quote(geo.normalize_zip(home_zip))}",
-            status_code=303,
+    with get_session() as s:
+        fields, error = _resolve_participant_form(
+            s, ev, None,
+            name=name, email=email, home_zip=home_zip, household=household,
+            is_rider=is_rider, joins_ride=joins_ride, num_bikes=num_bikes,
+            loaner_for=loaner_for, has_overnight_bag=has_overnight_bag,
+            car_combos=car_combos, willing_drop_car=willing_drop_car,
+            willing_drop_bikes_at_start=willing_drop_bikes_at_start,
+            willing_drive_dropper_home=willing_drive_dropper_home,
+            can_drive_morning=can_drive_morning, is_sag_driver=is_sag_driver,
+            share_household_car=share_household_car, sag_extra_miles=sag_extra_miles,
+            pref_tonight=pref_tonight, pref_bikeback=pref_bikeback, pref_ridehome=pref_ridehome,
         )
-
-    def _reject(message: str) -> RedirectResponse:
-        return RedirectResponse(
-            f"{_event_path(ev, role=access.role)}?error={quote(message)}",
-            status_code=303,
-        )
-
-    riding = _checkbox(is_rider)
-    sag = _checkbox(is_sag_driver)
-    if sag:
-        # only one person can drive the SAG wagon
-        existing = _sag_driver(_people_for_event(ev.id))
-        if existing is not None:
-            return _reject(
-                f"{existing.name} is already driving the SAG wagon — there can only be one."
+        if error is not None:
+            return RedirectResponse(
+                f"{_event_path(ev, role=access.role)}?error={quote(error)}",
+                status_code=303,
             )
-        # the SAG driver sweeps the route in their car, so they can't also ride it,
-        # and can't drop that car at the finish the night before
-        if riding:
-            return _reject("A SAG wagon driver can't also ride the route.")
-        if _checkbox(willing_drop_car):
-            return _reject(
-                "A SAG driver needs their car for the sweep and can't drop it at the finish."
-            )
+        s.add(Participant(event_id=ev.id, **fields))
+        s.flush()  # make the new row visible before deriving has_sag
+        _sync_event_sag(s, ev.id)
+        s.commit()
+    return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
 
-    car_flags = [
-        willing_drop_car, willing_drop_bikes_at_start,
-        willing_drive_dropper_home, can_drive_morning, is_sag_driver,
-    ]
-    # a car is implied by entering capacity or checking any car-requiring box
-    has_car = bool(car_combos.strip()) or any(f is not None for f in car_flags)
+
+@app.post("/e/{token}/participants/{pid}/update")
+def update_participant_token(
+    token: str,
+    pid: int,
+    name: str = Form(...),
+    email: str = Form(""),
+    home_zip: str = Form(...),
+    household: str = Form(""),
+    is_rider: str | None = Form(None),
+    joins_ride: str | None = Form(None),
+    num_bikes: int = Form(1),
+    loaner_for: list[str] = Form(default=[]),
+    has_overnight_bag: str | None = Form(None),
+    car_combos: str = Form(""),
+    willing_drop_car: str | None = Form(None),
+    willing_drop_bikes_at_start: str | None = Form(None),
+    willing_drive_dropper_home: str | None = Form(None),
+    can_drive_morning: str | None = Form(None),
+    is_sag_driver: str | None = Form(None),
+    share_household_car: str | None = Form(None),
+    sag_extra_miles: int = Form(20),
+    pref_tonight: str = Form("preferred"),
+    pref_bikeback: str = Form("acceptable"),
+    pref_ridehome: str = Form("acceptable"),
+):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role not in ("organizer", "participant"):
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+    ev = access.event
 
     with get_session() as s:
-        # "household" is the id of an existing participant to share with; resolve
-        # to their household identifier so chains stay consistent
-        household_value = ""
-        if household:
-            try:
-                target = s.get(Participant, int(household))
-            except (ValueError, TypeError):
-                target = None
-            if target is not None and target.event_id == ev.id:
-                household_value = target.household or str(target.id)
-        loaner_ids = ",".join(b for b in loaner_for if b)
-
-        p = Participant(
-            event_id=ev.id,
-            name=name,
-            email=email,
-            home_zip=geo.normalize_zip(home_zip),
-            household=household_value,
-            is_rider=riding,
-            # joining the SAG only applies to non-riders
-            joins_ride=_checkbox(joins_ride) and not riding,
-            num_bikes=num_bikes if riding else 0,  # "bikes I'll ride" only applies to riders
-            loaner_for=loaner_ids,
-            bag_count=1 if _checkbox(has_overnight_bag) else 0,
-            has_car=has_car,
-            car_combos=car_combos,
-            willing_drop_car=_checkbox(willing_drop_car),
-            willing_drop_bikes_at_start=_checkbox(willing_drop_bikes_at_start),
-            willing_drive_dropper_home=_checkbox(willing_drive_dropper_home),
-            can_drive_morning=_checkbox(can_drive_morning),
-            is_sag_driver=_checkbox(is_sag_driver),
-            share_household_car=_checkbox(share_household_car),
-            sag_extra_miles=sag_extra_miles,
-            pref_tonight=pref_tonight,
-            pref_bikeback=pref_bikeback,
-            pref_ridehome=pref_ridehome,
+        p = s.get(Participant, pid)
+        if p is None or p.event_id != ev.id:
+            return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
+        fields, error = _resolve_participant_form(
+            s, ev, pid,
+            name=name, email=email, home_zip=home_zip, household=household,
+            is_rider=is_rider, joins_ride=joins_ride, num_bikes=num_bikes,
+            loaner_for=loaner_for, has_overnight_bag=has_overnight_bag,
+            car_combos=car_combos, willing_drop_car=willing_drop_car,
+            willing_drop_bikes_at_start=willing_drop_bikes_at_start,
+            willing_drive_dropper_home=willing_drive_dropper_home,
+            can_drive_morning=can_drive_morning, is_sag_driver=is_sag_driver,
+            share_household_car=share_household_car, sag_extra_miles=sag_extra_miles,
+            pref_tonight=pref_tonight, pref_bikeback=pref_bikeback, pref_ridehome=pref_ridehome,
         )
+        if error is not None:
+            # keep the form open in edit mode so the error has context
+            return RedirectResponse(
+                f"{_event_path(ev, role=access.role)}?edit={pid}&error={quote(error)}",
+                status_code=303,
+            )
+        for key, value in fields.items():
+            setattr(p, key, value)
         s.add(p)
-        s.flush()  # make the new row visible before deriving has_sag
+        s.flush()
         _sync_event_sag(s, ev.id)
         s.commit()
     return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
