@@ -127,10 +127,11 @@ def cmd_load(args) -> int:
     with get_session() as s:
         ev = fixtures.seed_event(s, fx, replace=not args.keep_existing)
         ev_id = ev.id  # read before the session closes
+        organizer_token = ev.organizer_token
     print(
         f"Loaded '{fx['event']['name']}' as event {ev_id} "
         f"({len(fx['participants'])} participants).\n"
-        f"Run the app and open /events/{ev_id}."
+        f"Run the app and open /e/{organizer_token}."
     )
     return 0
 
