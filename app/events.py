@@ -35,13 +35,13 @@ class Route:
 ROUTES: dict[str, Route] = {
     "faribault_mankato": Route(
         key="faribault_mankato",
-        name="Faribault → Mankato",
+        name="Sakatah Trail",
         start_zip="55021",
         finish_zip="56001",
     ),
     "wayzata_hutchinson": Route(
         key="wayzata_hutchinson",
-        name="Wayzata → Hutchinson",
+        name="Hutchinson Route",
         start_zip="55391",
         finish_zip="55350",
     ),
