@@ -30,6 +30,7 @@
       <span class="muted">{{ people|length }} on roster</span>
     </div>
     {% if people %}
+    <div class="roster-wrap">
     <table class="roster">
       <thead><tr><th>Name</th><th>ZIP</th><th>Role</th><th>Car</th><th></th></tr></thead>
       <tbody>
@@ -50,10 +51,11 @@
             {% if p.is_sag_driver %}<span class="sag-badge compact">SAG</span>{% endif %}
           </td>
           <td>{% if p.has_car %}<span class="badge soft">{{ p.car_combos or "5x2" }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-          <td>
+          <td class="roster-actions">
             {% if can_manage_event %}
             <form method="post" action="{{ event_url('/participants/' ~ p.id ~ '/delete') }}">
-              <button class="link danger" type="submit">remove</button>
+              <button class="roster-remove" type="submit" title="Remove {{ p.name }}"
+                      aria-label="Remove {{ p.name }}">×</button>
             </form>
             {% endif %}
           </td>
@@ -61,6 +63,7 @@
       {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No participants yet.</p>
     {% endif %}

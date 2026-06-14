@@ -103,18 +103,24 @@ button:disabled { cursor: default; opacity: .75; }
   gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
 .pref-row:last-child { border-bottom: 0; }
 
+.roster-wrap { overflow-x: auto; }
 table.roster { width: 100%; border-collapse: collapse; }
-table.roster th, table.roster td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.roster th, table.roster td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.roster th:first-child, table.roster td:first-child { padding-left: 0; }
 table.roster th {
   color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
 }
 table.roster td { font-size: 14px; }
-.roster-name { display: flex; align-items: center; gap: 9px; min-width: 170px; }
+.roster-name { display: flex; align-items: flex-start; gap: 9px; min-width: 132px; }
+.roster-name .avatar { margin-top: 1px; }
 .roster-name small { display: block; margin-top: 1px; }
 .role-badge { background: var(--finish-bg); color: var(--finish-ink); }
-@media (max-width: 760px) {
-  table.roster { display: block; overflow-x: auto; white-space: nowrap; }
+.roster-actions { width: 1%; padding-right: 0; }
+.roster-remove {
+  background: none; color: var(--muted); border: 0; border-radius: 6px;
+  width: 26px; height: 26px; padding: 0; font-size: 18px; line-height: 1; cursor: pointer;
 }
+.roster-remove:hover { background: #fef2f2; color: var(--danger); }
 
 .event-list { list-style: none; padding: 0; }
 .event-list li { padding: 10px 0; border-bottom: 1px solid var(--line); }
