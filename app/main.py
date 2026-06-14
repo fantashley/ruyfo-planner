@@ -850,6 +850,7 @@ def add_participant_token(
     home_zip: str = Form(...),
     household: str = Form(""),  # id of an existing participant to share a household with
     is_rider: str | None = Form(None),
+    joins_ride: str | None = Form(None),
     num_bikes: int = Form(1),
     loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
     has_overnight_bag: str | None = Form(None),
