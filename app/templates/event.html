@@ -148,7 +148,7 @@
           <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers (riders) first.</small>
         </label>
         {% if event.has_sag %}
-        <label class="check" id="join-field"><input type="checkbox" name="joins_ride">
+        <label class="check" id="join-field"><input type="checkbox" name="joins_ride" id="joins_ride">
           I'm not riding, but I'm joining the ride in the SAG wagon</label>
         {% endif %}
         <label class="check" id="bag-field"><input type="checkbox" name="has_overnight_bag">
@@ -185,7 +185,7 @@
         {% endif %}
       </fieldset>
 
-      <fieldset>
+      <fieldset id="returns-field">
         <legend>Getting home — mark each option</legend>
         {% set opts = [("pref_tonight", "Drive/ride home the night of"),
                        ("pref_bikeback", "Hotel, then bike back next morning"),
@@ -217,17 +217,22 @@
 
   var rider = document.getElementById("is_rider");
   var sag = document.getElementById("is_sag_driver");
+  var joins = document.getElementById("joins_ride");
   var dropCar = document.getElementById("willing_drop_car");
   var bikes = document.getElementById("bikes-field");
   var joinField = document.getElementById("join-field");
   var sagExtra = document.getElementById("sag-extra-field");
+  var returns = document.getElementById("returns-field");
 
   function refresh() {
     var riding = rider ? rider.checked : true;
     var sagging = sag ? sag.checked : false;
+    var joining = joins ? joins.checked : false;
     toggle(bikes, riding);                       // "bikes I'll ride" — riders only
     toggle(joinField, !riding && !sagging);      // "joining in the SAG" — non-riders, non-SAG
     toggle(sagExtra, sagging);                   // extra-miles — SAG driver only
+    // "getting home" — riders, the SAG driver, and SAG riders return via the ride
+    toggle(returns, riding || sagging || joining);
   }
 
   // a SAG driver can't also ride the route or drop their car at the finish
@@ -239,6 +244,7 @@
     if (sag.checked) { setChecked(rider, false); setChecked(dropCar, false); }
     refresh();
   });
+  if (joins) joins.addEventListener("change", refresh);
   if (dropCar) dropCar.addEventListener("change", function () {
     if (dropCar.checked) setChecked(sag, false);
   });
