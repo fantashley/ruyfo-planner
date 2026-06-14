@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ event.name }} — RUYFO{% endblock %}
 {% block content %}
-<p><a href="/">← All events</a></p>
+<p><a href="/">← New event</a></p>
 <h1>{{ event.name }}</h1>
 <p class="muted">
   {{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}
@@ -27,9 +27,11 @@
           </td>
           <td>{% if p.has_car %}✓ {{ p.car_combos or "5x2" }}{% else %}—{% endif %}</td>
           <td>
-            <form method="post" action="/events/{{ event.id }}/participants/{{ p.id }}/delete">
+            {% if can_manage_event %}
+            <form method="post" action="{{ event_url('/participants/' ~ p.id ~ '/delete') }}">
               <button class="link danger" type="submit">remove</button>
             </form>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
@@ -40,14 +42,42 @@
     {% endif %}
 
     <p>
-      <a class="button big" href="/events/{{ event.id }}/plan">Generate plan →</a>
-      {% if people %}<a class="button" href="/events/{{ event.id }}/export">Export fixture</a>{% endif %}
+      <a class="button big" href="{{ event_url('/plan') }}">Generate plan →</a>
+      {% if can_manage_event and people %}<a class="button" href="{{ event_url('/export') }}">Export fixture</a>{% endif %}
     </p>
+
+    {% if can_manage_event %}
+    <details>
+      <summary>Share links</summary>
+      <p class="muted">Organizer links can manage the roster. Participant links can add people. Read-only links can view the roster and plan.</p>
+      <div class="share-links">
+        <label>Organizer link
+          <span class="share-row">
+            <input readonly value="{{ share_url(role='organizer') }}">
+            <button type="button" class="copy-link">Copy</button>
+          </span>
+        </label>
+        <label>Participant link
+          <span class="share-row">
+            <input readonly value="{{ share_url(role='participant') }}">
+            <button type="button" class="copy-link">Copy</button>
+          </span>
+        </label>
+        <label>Read-only link
+          <span class="share-row">
+            <input readonly value="{{ share_url(role='readonly') }}">
+            <button type="button" class="copy-link">Copy</button>
+          </span>
+        </label>
+      </div>
+    </details>
+    {% endif %}
   </section>
 
+  {% if can_add_participants %}
   <section class="card">
     <h2>Add a participant</h2>
-    <form method="post" action="/events/{{ event.id }}/participants">
+    <form method="post" action="{{ event_url('/participants') }}">
       <div class="grid2">
         <label>Name <input name="name" required></label>
         <label>Email <input name="email" type="email"></label>
@@ -130,6 +160,7 @@
       <button type="submit">Add participant</button>
     </form>
   </section>
+  {% endif %}
 </div>
 
 <script>
@@ -162,6 +193,34 @@
     [bikeback, ridehome].forEach(function (s) { if (s) s.addEventListener("change", syncBag); });
     syncBag();
   }
+
+  document.querySelectorAll(".copy-link").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var input = button.parentElement.querySelector("input");
+      var value = input.value;
+      var copied = navigator.clipboard && window.isSecureContext
+        ? navigator.clipboard.writeText(value)
+        : new Promise(function (resolve, reject) {
+            input.focus();
+            input.select();
+            try {
+              document.execCommand("copy") ? resolve() : reject();
+            } catch (err) {
+              reject(err);
+            }
+          });
+
+      copied.then(function () {
+        var original = button.textContent;
+        button.textContent = "Copied";
+        button.disabled = true;
+        setTimeout(function () {
+          button.textContent = original;
+          button.disabled = false;
+        }, 1200);
+      });
+    });
+  });
 })();
 </script>
 {% endblock %}

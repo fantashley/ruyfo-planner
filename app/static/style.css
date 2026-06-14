@@ -59,11 +59,17 @@ button {
 button:hover { background: var(--accent-dark); }
 button.link { background: none; color: var(--accent); padding: 0; }
 button.link.danger { color: var(--danger); }
+button:disabled { cursor: default; opacity: .75; }
 .button {
   display: inline-block; text-decoration: none; background: var(--accent);
   color: #fff; padding: 10px 16px; border-radius: 8px; font-weight: 600;
 }
 .button.big { font-size: 17px; padding: 12px 22px; }
+
+.share-links { margin-top: 10px; }
+.share-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.share-row input { margin-top: 0; min-width: 0; }
+.share-row button { flex: 0 0 auto; padding: 8px 12px; }
 
 .pref-row { display: flex; justify-content: space-between; align-items: center;
   gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); }

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlmodel import select
 
 from . import geo
@@ -694,11 +697,93 @@ def _checkbox(value: str | None) -> bool:
     return value is not None
 
 
+@dataclass(frozen=True)
+class EventAccess:
+    event: Event
+    role: str
+
+
+def _event_path(ev: Event, suffix: str = "", role: str = "organizer") -> str:
+    token = {
+        "organizer": ev.organizer_token,
+        "participant": ev.participant_token,
+        "readonly": ev.readonly_token,
+    }[role]
+    return f"/e/{token}{suffix}"
+
+
+def _external_url(request: Request, path: str) -> str:
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host:
+        return path
+    return f"{scheme}://{host}{path}"
+
+
+def _resolve_event_access(token: str) -> EventAccess | None:
+    with get_session() as s:
+        ev = s.exec(
+            select(Event).where(
+                or_(
+                    Event.organizer_token == token,
+                    Event.participant_token == token,
+                    Event.readonly_token == token,
+                )
+            )
+        ).first()
+        if ev is None:
+            return None
+        role = "readonly"
+        if token == ev.organizer_token:
+            role = "organizer"
+        elif token == ev.participant_token:
+            role = "participant"
+        return EventAccess(event=ev, role=role)
+
+
+def _people_for_event(event_id: int) -> list[Participant]:
+    with get_session() as s:
+        return s.exec(
+            select(Participant).where(Participant.event_id == event_id)
+        ).all()
+
+
+def _event_page_context(
+    request: Request,
+    access: EventAccess,
+    people: list[Participant],
+    error: str | None = None,
+) -> dict[str, Any]:
+    ev = access.event
+    route = get_route(ev.route_key)
+    household_mates: dict[int, list[str]] = {}
+    for p in people:
+        key = p.household or str(p.id)
+        mates = [
+            q.name for q in people
+            if q.id != p.id and (q.household or str(q.id)) == key
+        ]
+        household_mates[p.id] = mates
+    return {
+        "request": request,
+        "event": ev,
+        "route": route,
+        "people": people,
+        "household_mates": household_mates,
+        "error": error,
+        "access_role": access.role,
+        "can_add_participants": access.role in ("organizer", "participant"),
+        "can_manage_event": access.role == "organizer",
+        "event_url": lambda suffix="", role=access.role: _event_path(ev, suffix, role),
+        "share_url": lambda suffix="", role=access.role: _external_url(
+            request, _event_path(ev, suffix, role)
+        ),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    with get_session() as s:
-        events = s.exec(select(Event)).all()
-    return templates.TemplateResponse(request, "index.html", {"events": events})
+    return templates.TemplateResponse(request, "index.html", {})
 
 
 @app.post("/events")
@@ -709,38 +794,24 @@ def create_event(name: str = Form(...), route_key: str = Form(...),
         s.add(ev)
         s.commit()
         s.refresh(ev)
-    return RedirectResponse(f"/events/{ev.id}", status_code=303)
+    return RedirectResponse(_event_path(ev), status_code=303)
 
 
 @app.get("/events/{event_id}", response_class=HTMLResponse)
 def event_page(request: Request, event_id: int, error: str | None = None):
-    with get_session() as s:
-        ev = s.get(Event, event_id)
-        if ev is None:
-            return RedirectResponse("/", status_code=303)
-        people = s.exec(
-            select(Participant).where(Participant.event_id == event_id)
-        ).all()
-    route = get_route(ev.route_key)
-    # readable household-mates per participant (others sharing the same household)
-    household_mates: dict[int, list[str]] = {}
-    for p in people:
-        key = p.household or str(p.id)
-        mates = [
-            q.name for q in people
-            if q.id != p.id and (q.household or str(q.id)) == key
-        ]
-        household_mates[p.id] = mates
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/e/{token}", response_class=HTMLResponse)
+def event_token_page(request: Request, token: str, error: str | None = None):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    people = _people_for_event(access.event.id)
     return templates.TemplateResponse(
         request,
         "event.html",
-        {
-            "event": ev,
-            "route": route,
-            "people": people,
-            "household_mates": household_mates,
-            "error": error,
-        },
+        _event_page_context(request, access, people, error),
     )
 
 
@@ -767,12 +838,45 @@ def add_participant(
     pref_bikeback: str = Form("acceptable"),
     pref_ridehome: str = Form("acceptable"),
 ):
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/e/{token}/participants")
+def add_participant_token(
+    token: str,
+    name: str = Form(...),
+    email: str = Form(""),
+    home_zip: str = Form(...),
+    household: str = Form(""),  # id of an existing participant to share a household with
+    is_rider: str | None = Form(None),
+    num_bikes: int = Form(1),
+    loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
+    has_overnight_bag: str | None = Form(None),
+    car_combos: str = Form(""),
+    willing_drop_car: str | None = Form(None),
+    willing_drop_bikes_at_start: str | None = Form(None),
+    willing_drive_dropper_home: str | None = Form(None),
+    can_drive_morning: str | None = Form(None),
+    is_sag_driver: str | None = Form(None),
+    share_household_car: str | None = Form(None),
+    sag_extra_miles: int = Form(20),
+    pref_tonight: str = Form("preferred"),
+    pref_bikeback: str = Form("acceptable"),
+    pref_ridehome: str = Form("acceptable"),
+):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role not in ("organizer", "participant"):
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+    ev = access.event
+
     # validate the ZIP up front so we fail clearly rather than at solve time
     try:
         geo.latlon(home_zip)
     except geo.UnknownZip:
         return RedirectResponse(
-            f"/events/{event_id}?error=Unknown+ZIP+code+{geo.normalize_zip(home_zip)}",
+            f"{_event_path(ev, role=access.role)}?error=Unknown+ZIP+code+{quote(geo.normalize_zip(home_zip))}",
             status_code=303,
         )
 
@@ -792,13 +896,13 @@ def add_participant(
                 target = s.get(Participant, int(household))
             except (ValueError, TypeError):
                 target = None
-            if target is not None and target.event_id == event_id:
+            if target is not None and target.event_id == ev.id:
                 household_value = target.household or str(target.id)
         loaner_ids = ",".join(b for b in loaner_for if b)
         riding = _checkbox(is_rider)
 
         p = Participant(
-            event_id=event_id,
+            event_id=ev.id,
             name=name,
             email=email,
             home_zip=geo.normalize_zip(home_zip),
@@ -822,17 +926,28 @@ def add_participant(
         )
         s.add(p)
         s.commit()
-    return RedirectResponse(f"/events/{event_id}", status_code=303)
+    return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
 
 
 @app.post("/events/{event_id}/participants/{pid}/delete")
 def delete_participant(event_id: int, pid: int):
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/e/{token}/participants/{pid}/delete")
+def delete_participant_token(token: str, pid: int):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role != "organizer":
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+
     with get_session() as s:
         p = s.get(Participant, pid)
-        if p is not None:
+        if p is not None and p.event_id == access.event.id:
             s.delete(p)
             s.commit()
-    return RedirectResponse(f"/events/{event_id}", status_code=303)
+    return RedirectResponse(_event_path(access.event), status_code=303)
 
 
 def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
@@ -888,12 +1003,23 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
 
 @app.get("/events/{event_id}/export")
 def export_fixture(event_id: int):
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/e/{token}/export")
+def export_fixture_token(token: str):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role != "organizer":
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+
     with get_session() as s:
-        ev = s.get(Event, event_id)
+        ev = s.get(Event, access.event.id)
         if ev is None:
             return RedirectResponse("/", status_code=303)
         people = s.exec(
-            select(Participant).where(Participant.event_id == event_id)
+            select(Participant).where(Participant.event_id == ev.id)
         ).all()
     body = json.dumps(_fixture_dict(ev, people), indent=2)
     slug = re.sub(r"[^a-z0-9]+", "_", ev.name.lower()).strip("_") or "roster"
@@ -906,12 +1032,21 @@ def export_fixture(event_id: int):
 
 @app.get("/events/{event_id}/plan", response_class=HTMLResponse)
 def plan_page(request: Request, event_id: int):
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/e/{token}/plan", response_class=HTMLResponse)
+def plan_token_page(request: Request, token: str):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+
     with get_session() as s:
-        ev = s.get(Event, event_id)
+        ev = s.get(Event, access.event.id)
         if ev is None:
             return RedirectResponse("/", status_code=303)
         people = s.exec(
-            select(Participant).where(Participant.event_id == event_id)
+            select(Participant).where(Participant.event_id == ev.id)
         ).all()
 
     route = get_route(ev.route_key)
@@ -920,7 +1055,8 @@ def plan_page(request: Request, event_id: int):
             request,
             "plan.html",
             {"event": ev, "route": route,
-             "solution": None, "people": [], "empty": True},
+             "solution": None, "people": [], "empty": True,
+             "back_url": _event_path(ev, role=access.role)},
         )
 
     problem = Problem(
@@ -969,5 +1105,6 @@ def plan_page(request: Request, event_id: int):
             "unmet_count": len(unmet_lines),
             "unmet_tip": "\n".join(unmet_lines),
             "empty": False,
+            "back_url": _event_path(ev, role=access.role),
         },
     )

@@ -1,9 +1,9 @@
 from sqlmodel import SQLModel, Session, create_engine, select
 from sqlalchemy import text
 
-from app.db import _add_missing_sqlite_columns
+from app.db import _add_missing_sqlite_columns, _backfill_event_tokens
 from app import fixtures
-from app.models import Participant
+from app.models import Event, Participant
 from app.solver import solve
 
 
@@ -87,3 +87,32 @@ def test_sqlite_schema_migration_adds_new_participant_columns():
         s.commit()
         s.refresh(p)
         assert p.share_household_car is False
+
+
+def test_sqlite_schema_migration_adds_event_access_tokens():
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE event ("
+                "id INTEGER PRIMARY KEY, "
+                "name VARCHAR NOT NULL, "
+                "route_key VARCHAR NOT NULL, "
+                "has_sag BOOLEAN NOT NULL DEFAULT 0)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO event (name, route_key, has_sag) "
+                "VALUES ('Test RUYFO', 'faribault_mankato', 0)"
+            )
+        )
+
+    _add_missing_sqlite_columns(engine)
+    _backfill_event_tokens(engine)
+
+    with Session(engine) as s:
+        ev = s.exec(select(Event)).one()
+        tokens = {ev.organizer_token, ev.participant_token, ev.readonly_token}
+        assert len(tokens) == 3
+        assert all(len(token) >= 24 for token in tokens)
