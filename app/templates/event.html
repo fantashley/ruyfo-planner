@@ -47,8 +47,10 @@
           </td>
           <td>{{ p.home_zip }}</td>
           <td>
-            <span class="badge role-badge">{{ "rider" if p.is_rider else "supporter" }}</span>
-            {% if p.is_sag_driver %}<span class="sag-badge compact">SAG</span>{% endif %}
+            <span class="roster-roles">
+              {% if not p.is_sag_driver %}<span class="badge role-badge">{{ "rider" if p.is_rider else "supporter" }}</span>{% endif %}
+              {% if p.is_sag_driver %}<span class="sag-badge compact">SAG</span>{% endif %}
+            </span>
           </td>
           <td>{% if p.has_car %}<span class="badge soft">{{ p.car_combos or "5x2" }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="roster-actions">
@@ -70,7 +72,7 @@
 
     <div class="action-row">
       <a class="button big" href="{{ event_url('/plan') }}">Generate plan →</a>
-      {% if can_manage_event and people %}<a class="button" href="{{ event_url('/export') }}">Export fixture</a>{% endif %}
+      {% if can_manage_event and people %}<a class="button soft" href="{{ event_url('/export') }}">Export fixture</a>{% endif %}
     </div>
 
     {% if can_manage_event %}
