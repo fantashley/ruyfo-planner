@@ -130,11 +130,11 @@
         </label>
         <label>I'm bringing spare/loaner bikes for
           <select name="loaner_for" multiple size="3">
-            {% for q in people %}
+            {% for q in people if q.is_rider %}
             <option value="{{ q.id }}">{{ q.name }}</option>
             {% endfor %}
           </select>
-          <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers first.</small>
+          <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers (riders) first.</small>
         </label>
         {% if event.has_sag %}
         <label class="check" id="join-field"><input type="checkbox" name="joins_ride">
@@ -152,7 +152,7 @@
         </label>
         <label class="check"><input type="checkbox" name="can_drive_morning">
           Can drive people to the start the morning of</label>
-        <label class="check"><input type="checkbox" name="willing_drop_car">
+        <label class="check"><input type="checkbox" name="willing_drop_car" id="willing_drop_car">
           Willing to drop my car at the finish the night before</label>
         <label class="check"><input type="checkbox" name="willing_drive_dropper_home">
           Willing to drive a car-dropper home the night before</label>
@@ -197,24 +197,38 @@
 <script>
 (function () {
   function toggle(el, show) { if (el) el.style.display = show ? "" : "none"; }
+  function setChecked(el, val) {
+    if (el && el.checked !== val) { el.checked = val; el.dispatchEvent(new Event("change")); }
+  }
 
   var rider = document.getElementById("is_rider");
+  var sag = document.getElementById("is_sag_driver");
+  var dropCar = document.getElementById("willing_drop_car");
   var bikes = document.getElementById("bikes-field");
   var joinField = document.getElementById("join-field");
-  if (rider) {
-    var syncRider = function () {
-      toggle(bikes, rider.checked);            // "bikes I'll ride" — riders only
-      toggle(joinField, !rider.checked);       // "joining in the SAG" — non-riders
-    };
-    rider.addEventListener("change", syncRider); syncRider();
+  var sagExtra = document.getElementById("sag-extra-field");
+
+  function refresh() {
+    var riding = rider ? rider.checked : true;
+    var sagging = sag ? sag.checked : false;
+    toggle(bikes, riding);                       // "bikes I'll ride" — riders only
+    toggle(joinField, !riding && !sagging);      // "joining in the SAG" — non-riders, non-SAG
+    toggle(sagExtra, sagging);                   // extra-miles — SAG driver only
   }
 
-  var sag = document.getElementById("is_sag_driver");
-  var sagExtra = document.getElementById("sag-extra-field");
-  if (sag && sagExtra) {
-    var syncSag = function () { toggle(sagExtra, sag.checked); };
-    sag.addEventListener("change", syncSag); syncSag();
-  }
+  // a SAG driver can't also ride the route or drop their car at the finish
+  if (rider) rider.addEventListener("change", function () {
+    if (rider.checked) setChecked(sag, false);
+    refresh();
+  });
+  if (sag) sag.addEventListener("change", function () {
+    if (sag.checked) { setChecked(rider, false); setChecked(dropCar, false); }
+    refresh();
+  });
+  if (dropCar) dropCar.addEventListener("change", function () {
+    if (dropCar.checked) setChecked(sag, false);
+  });
+  refresh();
 
   var bag = document.getElementById("bag-field");
   var bikeback = document.querySelector('select[name="pref_bikeback"]');

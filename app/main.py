@@ -881,6 +881,22 @@ def add_participant_token(
             status_code=303,
         )
 
+    riding = _checkbox(is_rider)
+    sag = _checkbox(is_sag_driver)
+    # the SAG driver sweeps the route in their car, so they can't also ride it,
+    # and can't drop that car at the finish the night before
+    if riding and sag:
+        return RedirectResponse(
+            f"/events/{event_id}?error=A+SAG+wagon+driver+can%27t+also+ride+the+route.",
+            status_code=303,
+        )
+    if sag and _checkbox(willing_drop_car):
+        return RedirectResponse(
+            f"/events/{event_id}?error=A+SAG+driver+needs+their+car+for+the+sweep+"
+            f"and+can%27t+drop+it+at+the+finish.",
+            status_code=303,
+        )
+
     car_flags = [
         willing_drop_car, willing_drop_bikes_at_start,
         willing_drive_dropper_home, can_drive_morning, is_sag_driver,
@@ -900,7 +916,6 @@ def add_participant_token(
             if target is not None and target.event_id == ev.id:
                 household_value = target.household or str(target.id)
         loaner_ids = ",".join(b for b in loaner_for if b)
-        riding = _checkbox(is_rider)
 
         p = Participant(
             event_id=ev.id,
