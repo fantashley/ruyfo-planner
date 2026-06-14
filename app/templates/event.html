@@ -78,15 +78,18 @@
 
     <div class="action-row">
       <a class="button big" href="{{ event_url('/plan') }}">Generate plan →</a>
+    </div>
+
+    {% if can_add_participants %}
+    <div class="action-row data-actions">
       {% if can_manage_event and people %}<a class="button soft" href="{{ event_url('/export') }}">Export data</a>{% endif %}
-      {% if can_add_participants %}
       <form method="post" action="{{ event_url('/import') }}" enctype="multipart/form-data" class="import-form">
         <label class="button soft import-label" tabindex="0">Import data
           <input type="file" name="file" accept="application/json,.json" hidden>
         </label>
       </form>
-      {% endif %}
     </div>
+    {% endif %}
 
     {% if can_manage_event %}
     <details class="share-panel">
