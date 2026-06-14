@@ -23,6 +23,9 @@ class Event(SQLModel, table=True):
     organizer_token: str = Field(default_factory=new_access_token, index=True)
     participant_token: str = Field(default_factory=new_access_token, index=True)
     readonly_token: str = Field(default_factory=new_access_token, index=True)
+    # Optional: lets the creator recover their organizer link by email. Stored
+    # normalized (lowercased/stripped); "" means they declined to give one.
+    organizer_email: str = Field(default="", index=True)
 
 
 class Participant(SQLModel, table=True):

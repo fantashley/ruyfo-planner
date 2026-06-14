@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlmodel import delete, select
 
-from . import fixtures, geo
+from . import fixtures, geo, mailer
 from .db import get_session, init_db
 from .events import ROUTES, Route, get_route
 from .models import Event, Participant, to_person
@@ -720,6 +720,17 @@ def _external_url(request: Request, path: str) -> str:
     return f"{scheme}://{host}{path}"
 
 
+def _share_url(request: Request, ev: Event, role: str = "organizer") -> str:
+    """Absolute capability link for an event — used in recovery emails."""
+    return _external_url(request, _event_path(ev, role=role))
+
+
+def _normalize_email(value: str) -> str:
+    """Lowercase/strip; return "" for anything that isn't plausibly an address."""
+    value = value.strip().lower()
+    return value if "@" in value and "." in value.split("@")[-1] else ""
+
+
 def _resolve_event_access(token: str) -> EventAccess | None:
     with get_session() as s:
         ev = s.exec(
@@ -828,20 +839,80 @@ def _event_page_context(
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse(request, "index.html", {})
+def index(request: Request, recovered: int | None = None):
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {"email_enabled": mailer.is_configured(), "recovered": bool(recovered)},
+    )
+
+
+@app.post("/recover")
+def recover_links(request: Request, email: str = Form("")):
+    """Email a creator the organizer links for every event under their address.
+
+    Always redirects to the same neutral confirmation regardless of whether the
+    address matched anything — otherwise this open form would leak which emails
+    have created events.
+    """
+    normalized = _normalize_email(email)
+    if normalized and mailer.is_configured():
+        with get_session() as s:
+            events = s.exec(
+                select(Event).where(Event.organizer_email == normalized)
+            ).all()
+        if events:
+            lines = [
+                f"- {ev.name}\n    {_share_url(request, ev, 'organizer')}"
+                for ev in events
+            ]
+            mailer.send(
+                normalized,
+                "Your RUYFO event links",
+                "Here are the organizer links for the events you've created:\n\n"
+                + "\n".join(lines)
+                + "\n\nKeep these safe — they're how you get back in to manage each roster.\n",
+            )
+    return RedirectResponse("/?recovered=1", status_code=303)
 
 
 @app.post("/events")
-def create_event(name: str = Form(...), route_key: str = Form(...)):
+def create_event(
+    request: Request,
+    name: str = Form(...),
+    route_key: str = Form(...),
+    organizer_email: str = Form(""),
+):
+    email = _normalize_email(organizer_email)
     with get_session() as s:
         # A SAG wagon isn't declared up front anymore — the event gains one
         # once a participant checks "I'll drive the SAG wagon".
-        ev = Event(name=name, route_key=route_key, has_sag=False)
+        ev = Event(name=name, route_key=route_key, has_sag=False, organizer_email=email)
         s.add(ev)
         s.commit()
         s.refresh(ev)
-    return RedirectResponse(_event_path(ev), status_code=303)
+    if email:
+        _email_organizer_link(request, ev, email)
+    return RedirectResponse(f"{_event_path(ev)}?created=1", status_code=303)
+
+
+def _email_organizer_link(request: Request, ev: Event, to: str) -> None:
+    """Email the organizer link for a single freshly created event."""
+    link = _share_url(request, ev, "organizer")
+    mailer.send(
+        to,
+        f"Your RUYFO organizer link for {ev.name}",
+        f"""You created the event "{ev.name}".
+
+This is your organizer link — keep it safe, it's how you get back in to
+manage the roster:
+
+  {link}
+
+Lost it later? Visit the planner home page and use "Lost your link?" to
+have all your event links emailed again.
+""",
+    )
 
 
 @app.get("/events/{event_id}", response_class=HTMLResponse)
@@ -851,7 +922,11 @@ def event_page(request: Request, event_id: int, error: str | None = None):
 
 @app.get("/e/{token}", response_class=HTMLResponse)
 def event_token_page(
-    request: Request, token: str, error: str | None = None, edit: int | None = None
+    request: Request,
+    token: str,
+    error: str | None = None,
+    edit: int | None = None,
+    created: int | None = None,
 ):
     access = _resolve_event_access(token)
     if access is None:
@@ -860,11 +935,12 @@ def event_token_page(
     editing = None
     if edit is not None and access.role in ("organizer", "participant"):
         editing = next((p for p in people if p.id == edit), None)
-    return templates.TemplateResponse(
-        request,
-        "event.html",
-        _event_page_context(request, access, people, error, editing),
-    )
+    context = _event_page_context(request, access, people, error, editing)
+    # When a creator first lands here, nudge them to save the link (and, if they
+    # gave an email, tell them it's also on its way).
+    context["just_created"] = bool(created) and access.role == "organizer"
+    context["emailed_link"] = bool(access.event.organizer_email) and mailer.is_configured()
+    return templates.TemplateResponse(request, "event.html", context)
 
 
 def _resolve_participant_form(
