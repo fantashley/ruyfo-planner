@@ -441,37 +441,56 @@ class _Model:
         self._build_sag_limit()
 
     def _build_sag_limit(self):
-        """Hard-cap how far the SAG wagon may be driven.
+        """Hard-cap the SAG wagon's *extra* driving.
 
-        The SAG's only obligation is the ride sweep (start -> finish). Its free
-        baseline is the minimal drive it must do anyway — home -> start (to reach
-        the sweep) + start -> finish (the sweep) + finish -> home — so carrying
-        people on those same legs is free. Any *extra* base miles beyond that
-        baseline (e.g. a finish -> start backtrack, or multi-town detours) are
-        forbidden once they exceed the SAG driver's stated tolerance
-        (`sag_extra_miles`, default 20). Set a larger tolerance to volunteer for
-        more; an over-budget plan is reported infeasible.
+        The SAG's only obligation is to position at the start, sweep start ->
+        finish, and get itself home. Those legs are free — and so is any
+        same-leg ferrying on them (people/cargo riding along on a leg the SAG
+        drives anyway). Every OTHER driven mile is "extra": a finish -> start
+        backtrack, an evening shuttle, a night-before run. The total of those
+        extra miles may not exceed the driver's stated tolerance
+        (`sag_extra_miles`, default 20) — set it higher to volunteer for more;
+        an over-budget plan is reported infeasible.
+
+        Counting total-vs-baseline (the old approach) failed for a SAG driver
+        who lives at the finish: an equal-length evening ferry slipped under the
+        baseline even though it was 100% extra. This counts the extra legs
+        directly instead.
         """
         if not self.sag:
             return
         sag = self.sag
-        baseline = (
-            _arc_distance(sag.home_zip, self.route, H, S)
-            + _arc_distance(sag.home_zip, self.route, S, F)
-            + _arc_distance(sag.home_zip, self.route, F, H)
-        )
-        budget = round((baseline + max(0, sag.sag_extra_miles)) * SCALE)
-        miles = []
+        route = self.route
+        # If the SAG driver lives in the start (or finish) town, arriving there is
+        # also "going home" — so an equivalent home leg isn't charged. Their
+        # OUTBOUND legs toward the start still count (that's the over-use we cap).
+        home_at_start = _arc_distance(sag.home_zip, route, H, S) < ZERO_MI
+        home_at_finish = _arc_distance(sag.home_zip, route, H, F) < ZERO_MI
+
+        def _free(k, a, b):
+            if (k, a, b) == (T_MORNING, H, S):  # morning positioning to the start
+                return True
+            if (k, a, b) == (T_RIDE, S, F):  # the ride sweep
+                return True
+            if b == H:  # going home
+                return True
+            if b == S and home_at_start:  # the start town *is* home
+                return True
+            if b == F and home_at_finish:  # the finish town *is* home
+                return True
+            return False
+
+        extra = []
         for k in range(NK):
             for (a, b) in ALLOWED_ARCS[k]:
                 mv = self.cmove.get((sag.id, k, a, b))
-                if mv is None:
+                if mv is None or _free(k, a, b):
                     continue
-                d = round(_arc_distance(sag.home_zip, self.route, a, b) * SCALE)
+                d = round(_arc_distance(sag.home_zip, route, a, b) * SCALE)
                 if d:
-                    miles.append(d * mv)
-        if miles:
-            self.m.add(sum(miles) <= budget)
+                    extra.append(d * mv)
+        if extra:
+            self.m.add(sum(extra) <= round(max(0, sag.sag_extra_miles) * SCALE))
 
     def _person_carried(self, pid, k, frm=None, to=None):
         """All ways person ``pid`` traverses an arc at step ``k`` (filtered by end)."""

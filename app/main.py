@@ -986,7 +986,7 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
         ):
             if getattr(p, flag):
                 entry[flag] = True
-        if p.is_sag_driver and p.sag_extra_miles != 20:
+        if p.is_sag_driver:
             entry["sag_extra_miles"] = p.sag_extra_miles
         entry["return"] = {
             "tonight": p.pref_tonight,

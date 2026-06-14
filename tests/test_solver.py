@@ -780,3 +780,26 @@ def test_overnight_bag_ignored_when_owner_goes_home_tonight():
     assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     assert solver.Value(mb.home_tonight["ann"]) == 1
     assert all(solver.Value(mb.gat["ann", t, F]) == 0 for t in range(10))
+
+
+def test_sag_living_at_finish_cannot_ferry_beyond_tolerance():
+    # A SAG driver who lives at the finish: an evening finish->start ferry is all
+    # "extra" (away from home), so it's capped — even though its mileage equals
+    # the old home->start->finish->home baseline (which wrongly allowed it).
+    rider = Person(
+        id="r", name="R", home_zip="55021", num_bikes=1, return_prefs=only(BIKEBACK),
+    )
+
+    def model(extra):
+        sag = Person(
+            id="s", name="S", home_zip="56001", is_rider=False, has_car=True,
+            car_combos=[CarCombo(8, 8)], is_sag_driver=True, can_drive_morning=True,
+            willing_drive_dropper_home=True, sag_extra_miles=extra,
+        )
+        mb = _Model(Problem(route=ROUTE, people=[rider, sag], has_sag=True))
+        mb.m.Add(mb.cmove["s", T_RIDE + 1, F, S] == 1)  # evening finish->start ferry
+        return mb
+
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model(0).m) == cp_model.INFEASIBLE
+    assert solver.Solve(model(200).m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
