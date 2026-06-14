@@ -117,7 +117,7 @@ input:focus, select:focus, input:focus-visible, select:focus-visible {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
 }
 label.check input, .pref-row select { width: auto; margin-top: 0; }
-label.check input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
+label.check input[type="checkbox"] { flex: 0 0 auto; width: 17px; height: 17px; accent-color: var(--accent); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 fieldset { border: 1px solid var(--line); border-radius: var(--r-md); margin: 18px 0; padding: 14px 18px;
   background: var(--surface-2); }
