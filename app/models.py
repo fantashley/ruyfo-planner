@@ -35,6 +35,7 @@ class Participant(SQLModel, table=True):
     household: str = ""  # the participant id whose household this person shares ("" = own)
 
     is_rider: bool = True
+    joins_ride: bool = False  # non-rider who rides along in the SAG to the finish
     num_bikes: int = 1
     loaner_for: str = ""  # comma-separated participant ids this person lends a bike to
     bag_count: int = 0  # overnight bags to get to the hotel
@@ -84,6 +85,7 @@ def to_person(p: Participant) -> Person:
         home_zip=p.home_zip,
         household=p.household or str(p.id),
         is_rider=p.is_rider,
+        joins_ride=p.joins_ride,
         num_bikes=p.num_bikes,
         loaner_for=[x.strip() for x in p.loaner_for.split(",") if x.strip()],
         bag_count=p.bag_count,

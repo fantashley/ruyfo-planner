@@ -823,6 +823,7 @@ def add_participant(
     home_zip: str = Form(...),
     household: str = Form(""),  # id of an existing participant to share a household with
     is_rider: str | None = Form(None),
+    joins_ride: str | None = Form(None),
     num_bikes: int = Form(1),
     loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
     has_overnight_bag: str | None = Form(None),
@@ -908,6 +909,8 @@ def add_participant_token(
             home_zip=geo.normalize_zip(home_zip),
             household=household_value,
             is_rider=riding,
+            # joining the SAG only applies to non-riders
+            joins_ride=_checkbox(joins_ride) and not riding,
             num_bikes=num_bikes if riding else 0,  # "bikes I'll ride" only applies to riders
             loaner_for=loaner_ids,
             bag_count=1 if _checkbox(has_overnight_bag) else 0,
@@ -970,6 +973,8 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
         entry["is_rider"] = p.is_rider
         if p.is_rider:
             entry["num_bikes"] = p.num_bikes
+        elif p.joins_ride:
+            entry["joins_ride"] = True
         loaners = [id_to_name[i] for i in p.loaner_for.split(",") if i in id_to_name]
         if loaners:
             entry["loaner_for"] = loaners

@@ -136,6 +136,10 @@
           </select>
           <small class="muted">Hold ⌘/Ctrl to pick more than one. Add the borrowers first.</small>
         </label>
+        {% if event.has_sag %}
+        <label class="check" id="join-field"><input type="checkbox" name="joins_ride">
+          I'm not riding, but I'm joining the ride in the SAG wagon</label>
+        {% endif %}
         <label class="check" id="bag-field"><input type="checkbox" name="has_overnight_bag">
           I'll have an overnight bag if I stay the night</label>
       </fieldset>
@@ -196,8 +200,12 @@
 
   var rider = document.getElementById("is_rider");
   var bikes = document.getElementById("bikes-field");
-  if (rider && bikes) {
-    var syncRider = function () { toggle(bikes, rider.checked); };
+  var joinField = document.getElementById("join-field");
+  if (rider) {
+    var syncRider = function () {
+      toggle(bikes, rider.checked);            // "bikes I'll ride" — riders only
+      toggle(joinField, !rider.checked);       // "joining in the SAG" — non-riders
+    };
     rider.addEventListener("change", syncRider); syncRider();
   }
 

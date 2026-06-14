@@ -803,3 +803,21 @@ def test_sag_living_at_finish_cannot_ferry_beyond_tolerance():
     solver = cp_model.CpSolver()
     assert solver.Solve(model(0).m) == cp_model.INFEASIBLE
     assert solver.Solve(model(200).m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+def test_non_rider_joins_the_ride_in_the_sag():
+    # A non-rider who opts to join is carried start->finish by the SAG and ends
+    # the ride at the finish — not left at home.
+    joiner = Person(
+        id="j", name="J", home_zip="55021", is_rider=False, joins_ride=True,
+        return_prefs=only(TONIGHT),
+    )
+    sag = Person(
+        id="s", name="S", home_zip="55021", is_rider=False, has_car=True,
+        car_combos=[CarCombo(8, 8)], is_sag_driver=True, can_drive_morning=True,
+    )
+    mb = _Model(Problem(route=ROUTE, people=[joiner, sag], has_sag=True))
+    solver = cp_model.CpSolver()
+    assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mb.pat["j", T_RIDE + 1, F]) == 1            # at the finish after the ride
+    assert solver.Value(mb.incar["j", "s", T_RIDE, S, F]) == 1      # carried by the SAG on the sweep

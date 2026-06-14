@@ -76,6 +76,7 @@ def build_problem(fixture: dict) -> Problem:
                 home_zip=str(p["home_zip"]),
                 household=p.get("household", ""),
                 is_rider=p.get("is_rider", True),
+                joins_ride=p.get("joins_ride", False),
                 num_bikes=p.get("num_bikes", 1),
                 loaner_for=p.get("loaner_for", []),  # borrower name(s); str or list ok
                 bag_count=p.get("bag_count", 0),
@@ -143,6 +144,7 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
                 home_zip=str(p["home_zip"]),
                 household=p.get("household", ""),
                 is_rider=p.get("is_rider", True),
+                joins_ride=p.get("joins_ride", False),
                 num_bikes=p.get("num_bikes", 1),
                 bag_count=p.get("bag_count", 0),
                 has_car=_implies_car(p),

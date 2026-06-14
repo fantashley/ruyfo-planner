@@ -63,6 +63,7 @@ class Person:
     home_zip: str
     household: str = ""  # blank => own household (id used)
     is_rider: bool = True
+    joins_ride: bool = False  # non-rider who comes along in the SAG (start -> finish)
     num_bikes: int = 1  # bikes this person OWNS and rides (NOT counting loaners they
     #                     bring for others); 0 for a supporter or a loaner-only rider
     loaner_for: list[str] = field(default_factory=list)  # ids this person lends a bike to
@@ -324,7 +325,7 @@ class _Model:
             # Bike-back riders are unaffected — they wake at F and pedal F->S
             # during T_BIKEBACK, reaching S only at the next time point.
             m.add(self.pat[p.id, T_BIKEBACK, S] == 0)
-            if p.is_rider:
+            if p.is_rider or p.joins_ride:
                 m.add(self.pat[p.id, T_RIDE, S] == 1)  # at start for the ride
                 m.add(self.pat[p.id, T_RIDE + 1, F] == 1)  # at finish after the ride
 
@@ -347,12 +348,13 @@ class _Model:
                     for o in self.owners:
                         if (o.id, k, a, b) not in self.cmove:
                             continue
-                        # a rider cannot be *chauffeured* start->finish during the
-                        # ride; they must bicycle (or ride the SAG wagon)
+                        # a rider (or a non-rider joining the ride) cannot be
+                        # *chauffeured* start->finish during the ride by a regular
+                        # car; they cross by bicycle or in the SAG wagon
                         if (
                             k == T_RIDE
                             and (a, b) == (S, F)
-                            and p.is_rider
+                            and (p.is_rider or p.joins_ride)
                             and not (self.sag and o.id == self.sag.id)
                         ):
                             continue
