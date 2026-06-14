@@ -79,6 +79,13 @@
     <div class="action-row">
       <a class="button big" href="{{ event_url('/plan') }}">Generate plan →</a>
       {% if can_manage_event and people %}<a class="button soft" href="{{ event_url('/export') }}">Export data</a>{% endif %}
+      {% if can_add_participants %}
+      <form method="post" action="{{ event_url('/import') }}" enctype="multipart/form-data" class="import-form">
+        <label class="button soft import-label" tabindex="0">Import data
+          <input type="file" name="file" accept="application/json,.json" hidden>
+        </label>
+      </form>
+      {% endif %}
     </div>
 
     {% if can_manage_event %}
@@ -270,6 +277,21 @@
     [bikeback, ridehome].forEach(function (s) { if (s) s.addEventListener("change", syncBag); });
     syncBag();
   }
+
+  // "Import data": picking a file submits the upload; Enter/Space opens the picker
+  document.querySelectorAll(".import-form input[type=file]").forEach(function (input) {
+    input.addEventListener("change", function () {
+      if (input.files.length) input.form.submit();
+    });
+  });
+  document.querySelectorAll(".import-label").forEach(function (label) {
+    label.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        label.querySelector("input").click();
+      }
+    });
+  });
 
   document.querySelectorAll(".copy-link").forEach(function (button) {
     button.addEventListener("click", function () {

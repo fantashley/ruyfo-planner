@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlmodel import delete, select
 
-from . import geo
+from . import fixtures, geo
 from .db import get_session, init_db
 from .events import ROUTES, Route, get_route
 from .models import Event, Participant, to_person
@@ -1237,6 +1237,58 @@ def export_fixture_token(token: str):
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{slug}.json"'},
     )
+
+
+@app.post("/e/{token}/import")
+async def import_participants_token(token: str, file: UploadFile = File(...)):
+    """Add the participants from an exported data file to this event."""
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role not in ("organizer", "participant"):
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+    ev = access.event
+
+    def _bad(message: str) -> RedirectResponse:
+        return RedirectResponse(
+            f"{_event_path(ev, role=access.role)}?error={quote(message)}", status_code=303
+        )
+
+    try:
+        data = json.loads(await file.read())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _bad("That file isn't valid JSON data.")
+
+    # accept a full export ({"participants": [...]}) or a bare list of people
+    people = data.get("participants") if isinstance(data, dict) else data
+    if not isinstance(people, list) or not people:
+        return _bad("No participants found in that data file.")
+    if not all(isinstance(p, dict) and p.get("name") and p.get("home_zip") for p in people):
+        return _bad("The data file's participants are missing a name or home ZIP.")
+    for p in people:
+        try:
+            geo.latlon(str(p["home_zip"]))
+        except geo.UnknownZip:
+            return _bad(f"Unknown ZIP code {geo.normalize_zip(str(p['home_zip']))} for {p['name']}.")
+
+    # honor the single-SAG-driver rule: keep the first volunteer (existing roster
+    # first), demote the rest in the imported batch
+    seen_sag = _sag_driver(_people_for_event(ev.id)) is not None
+    cleaned = []
+    for p in people:
+        p = dict(p)
+        if p.get("is_sag_driver"):
+            if seen_sag:
+                p["is_sag_driver"] = False
+            else:
+                seen_sag = True
+        cleaned.append(p)
+
+    with get_session() as s:
+        fixtures.add_participants(s, ev.id, cleaned)
+        _sync_event_sag(s, ev.id)
+        s.commit()
+    return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
 
 
 @app.get("/events/{event_id}/plan", response_class=HTMLResponse)

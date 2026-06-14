@@ -110,35 +110,20 @@ def build_problem(fixture: dict) -> Problem:
     )
 
 
-def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
-    """Insert the fixture's event + participants into the DB.
+def add_participants(session, event_id: int, participants: list[dict]) -> list[Participant]:
+    """Create participant rows for an event from fixture-style dicts.
 
-    With ``replace`` (default), any existing event of the same name is removed
-    first so re-loading is idempotent. Loaner references (by borrower name) are
-    resolved to participant ids after insert.
+    Loaner references (borrower name or list of names) are resolved to
+    comma-separated participant ids, looked up across the event's whole roster
+    (so importing into an existing event still links correctly). Returns the
+    newly created rows.
     """
-    ev_data = fixture["event"]
-    if replace:
-        for old in session.exec(select(Event).where(Event.name == ev_data["name"])).all():
-            session.exec(delete(Participant).where(Participant.event_id == old.id))
-            session.delete(old)
-        session.commit()
-
-    ev = Event(
-        name=ev_data["name"],
-        route_key=ev_data["route_key"],
-        has_sag=ev_data.get("has_sag", False),
-    )
-    session.add(ev)
-    session.commit()
-    session.refresh(ev)
-
     rows = []
-    for p in fixture["participants"]:
+    for p in participants:
         ret = _return_strings(p)
         rows.append(
             Participant(
-                event_id=ev.id,
+                event_id=event_id,
                 name=p["name"],
                 email=p.get("email", ""),
                 home_zip=str(p["home_zip"]),
@@ -166,9 +151,13 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
     for r in rows:
         session.refresh(r)
 
-    # resolve loaner_for (borrower name or list of names) to comma-separated ids
-    by_name = {r.name: r for r in rows}
-    for p, r in zip(fixture["participants"], rows):
+    by_name = {
+        r.name: r
+        for r in session.exec(
+            select(Participant).where(Participant.event_id == event_id)
+        ).all()
+    }
+    for p, r in zip(participants, rows):
         raw = p.get("loaner_for", [])
         names = [raw] if isinstance(raw, str) else list(raw)
         ids = [str(by_name[n].id) for n in names if n and n in by_name]
@@ -176,4 +165,30 @@ def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
             r.loaner_for = ",".join(ids)
             session.add(r)
     session.commit()
+    return rows
+
+
+def seed_event(session, fixture: dict, *, replace: bool = True) -> Event:
+    """Insert the fixture's event + participants into the DB.
+
+    With ``replace`` (default), any existing event of the same name is removed
+    first so re-loading is idempotent.
+    """
+    ev_data = fixture["event"]
+    if replace:
+        for old in session.exec(select(Event).where(Event.name == ev_data["name"])).all():
+            session.exec(delete(Participant).where(Participant.event_id == old.id))
+            session.delete(old)
+        session.commit()
+
+    ev = Event(
+        name=ev_data["name"],
+        route_key=ev_data["route_key"],
+        has_sag=ev_data.get("has_sag", False),
+    )
+    session.add(ev)
+    session.commit()
+    session.refresh(ev)
+
+    add_participants(session, ev.id, fixture["participants"])
     return ev
