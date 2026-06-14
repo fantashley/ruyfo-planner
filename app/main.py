@@ -501,7 +501,7 @@ PHASE_GROUP_LABEL = {
     "Night before": "The night before",
     "Morning of the ride": "Morning of the ride",
     "The ride": "The ride",
-    "Evening": "The evening after the ride",
+    "Evening": "The evening of the ride",
     "Next morning": "The next morning",
 }
 

@@ -157,7 +157,7 @@ TRANSITION_LABELS = [
     "Night before — continue",
     "Morning of the ride",
     "The ride",
-    "Evening — after the ride",
+    "Evening — of the ride",
     "Evening — continued",
     "Next morning",
     "Next morning — continued",
