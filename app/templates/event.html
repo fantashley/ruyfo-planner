@@ -41,7 +41,7 @@
               <span class="avatar avatar-{{ 'rider' if p.is_rider else 'supporter' }}">{{ p.name|initials }}</span>
               <span>
                 <b>{{ p.name }}</b>
-                {% if household_mates[p.id] %}<small class="muted">Home with {{ household_mates[p.id]|join(", ") }}</small>{% endif %}
+                {% if household_mates[p.id] %}<small class="muted">Household with {{ household_mates[p.id]|join(", ") }}</small>{% endif %}
               </span>
             </span>
           </td>
@@ -171,7 +171,10 @@
           Willing to shuttle bikes to the start the night before</label>
         <label class="check"><input type="checkbox" name="share_household_car">
           Pool cars with my household (we can drive each other's cars)</label>
-        {% if event.has_sag %}
+        {% if sag_driver %}
+        <p class="field-note"><span class="sag-badge compact">SAG</span>
+          {{ sag_driver.name }} is driving the SAG wagon for this event.</p>
+        {% else %}
         <label class="check"><input type="checkbox" name="is_sag_driver" id="is_sag_driver">
           I'll drive the SAG wagon</label>
         <label id="sag-extra-field">Extra SAG miles I'll drive beyond my own route

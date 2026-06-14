@@ -748,6 +748,32 @@ def _people_for_event(event_id: int) -> list[Participant]:
         ).all()
 
 
+def _sag_driver(people: list[Participant]) -> Participant | None:
+    """The single participant driving the SAG wagon, if any."""
+    return next((p for p in people if p.is_sag_driver), None)
+
+
+def _sync_event_sag(s, event_id: int) -> None:
+    """Keep Event.has_sag in step with whether a participant drives the SAG.
+
+    A SAG wagon is no longer declared up front at event creation; the event
+    "has" one exactly when someone has checked "I'll drive the SAG wagon".
+    Call this after the roster changes (flush first so new rows are visible).
+    """
+    ev = s.get(Event, event_id)
+    if ev is None:
+        return
+    has = s.exec(
+        select(Participant).where(
+            Participant.event_id == event_id,
+            Participant.is_sag_driver == True,  # noqa: E712 - SQL boolean comparison
+        )
+    ).first() is not None
+    if ev.has_sag != has:
+        ev.has_sag = has
+        s.add(ev)
+
+
 def _event_page_context(
     request: Request,
     access: EventAccess,
@@ -770,6 +796,7 @@ def _event_page_context(
         "route": route,
         "people": people,
         "household_mates": household_mates,
+        "sag_driver": _sag_driver(people),
         "error": error,
         "access_role": access.role,
         "can_add_participants": access.role in ("organizer", "participant"),
@@ -787,10 +814,11 @@ def index(request: Request):
 
 
 @app.post("/events")
-def create_event(name: str = Form(...), route_key: str = Form(...),
-                 has_sag: str | None = Form(None)):
+def create_event(name: str = Form(...), route_key: str = Form(...)):
     with get_session() as s:
-        ev = Event(name=name, route_key=route_key, has_sag=_checkbox(has_sag))
+        # A SAG wagon isn't declared up front anymore — the event gains one
+        # once a participant checks "I'll drive the SAG wagon".
+        ev = Event(name=name, route_key=route_key, has_sag=False)
         s.add(ev)
         s.commit()
         s.refresh(ev)
@@ -882,21 +910,29 @@ def add_participant_token(
             status_code=303,
         )
 
+    def _reject(message: str) -> RedirectResponse:
+        return RedirectResponse(
+            f"{_event_path(ev, role=access.role)}?error={quote(message)}",
+            status_code=303,
+        )
+
     riding = _checkbox(is_rider)
     sag = _checkbox(is_sag_driver)
-    # the SAG driver sweeps the route in their car, so they can't also ride it,
-    # and can't drop that car at the finish the night before
-    if riding and sag:
-        return RedirectResponse(
-            f"/events/{event_id}?error=A+SAG+wagon+driver+can%27t+also+ride+the+route.",
-            status_code=303,
-        )
-    if sag and _checkbox(willing_drop_car):
-        return RedirectResponse(
-            f"/events/{event_id}?error=A+SAG+driver+needs+their+car+for+the+sweep+"
-            f"and+can%27t+drop+it+at+the+finish.",
-            status_code=303,
-        )
+    if sag:
+        # only one person can drive the SAG wagon
+        existing = _sag_driver(_people_for_event(ev.id))
+        if existing is not None:
+            return _reject(
+                f"{existing.name} is already driving the SAG wagon — there can only be one."
+            )
+        # the SAG driver sweeps the route in their car, so they can't also ride it,
+        # and can't drop that car at the finish the night before
+        if riding:
+            return _reject("A SAG wagon driver can't also ride the route.")
+        if _checkbox(willing_drop_car):
+            return _reject(
+                "A SAG driver needs their car for the sweep and can't drop it at the finish."
+            )
 
     car_flags = [
         willing_drop_car, willing_drop_bikes_at_start,
@@ -944,6 +980,8 @@ def add_participant_token(
             pref_ridehome=pref_ridehome,
         )
         s.add(p)
+        s.flush()  # make the new row visible before deriving has_sag
+        _sync_event_sag(s, ev.id)
         s.commit()
     return RedirectResponse(_event_path(ev, role=access.role), status_code=303)
 
@@ -965,6 +1003,8 @@ def delete_participant_token(token: str, pid: int):
         p = s.get(Participant, pid)
         if p is not None and p.event_id == access.event.id:
             s.delete(p)
+            s.flush()  # drop the row before re-deriving has_sag
+            _sync_event_sag(s, access.event.id)
             s.commit()
     return RedirectResponse(_event_path(access.event), status_code=303)
 
