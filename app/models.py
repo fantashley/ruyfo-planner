@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -9,11 +10,19 @@ from sqlmodel import Field, SQLModel
 from .solver import CarCombo, Person, Pref, ReturnOption
 
 
+def new_access_token() -> str:
+    """Generate an unguessable URL token for event capability links."""
+    return secrets.token_urlsafe(24)
+
+
 class Event(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     route_key: str
     has_sag: bool = False
+    organizer_token: str = Field(default_factory=new_access_token, index=True)
+    participant_token: str = Field(default_factory=new_access_token, index=True)
+    readonly_token: str = Field(default_factory=new_access_token, index=True)
 
 
 class Participant(SQLModel, table=True):

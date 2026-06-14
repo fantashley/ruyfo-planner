@@ -2,19 +2,6 @@
 {% block content %}
 <h1>Events</h1>
 
-{% if events %}
-<ul class="event-list">
-  {% for e in events %}
-  <li>
-    <a href="/events/{{ e.id }}">{{ e.name }}</a>
-    <span class="muted">— {{ ROUTES[e.route_key].name }}{% if e.has_sag %} · SAG wagon{% endif %}</span>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}
-<p class="muted">No events yet. Create one below.</p>
-{% endif %}
-
 <section class="card">
   <h2>New event</h2>
   <form method="post" action="/events">
