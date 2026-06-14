@@ -1,31 +1,55 @@
 {% extends "base.html" %}
 {% block title %}{{ event.name }} — RUYFO{% endblock %}
 {% block content %}
-<p><a href="/">← New event</a></p>
-<h1>{{ event.name }}</h1>
-<p class="muted">
-  {{ route.name }} · {{ route.start_name }} → {{ route.finish_name }}
-  ({{ "%.0f"|format(route.distance_miles) }} mi){% if event.has_sag %} · SAG wagon available{% endif %}
-</p>
+<p class="crumb"><a href="/">← New event</a></p>
+
+<div class="page-hero event-hero">
+  <div>
+    <p class="eyebrow">{{ route.name }}</p>
+    <h1>{{ event.name }}</h1>
+    <div class="route-strip">
+      <span class="loc loc-start">{{ route.start_name }}</span>
+      <span class="route-arrow">→</span>
+      <span class="loc loc-finish">{{ route.finish_name }}</span>
+      {% if event.has_sag %}<span class="sag-badge">SAG wagon</span>{% endif %}
+    </div>
+  </div>
+  <div class="hero-stats">
+    <div class="stat mini"><b>{{ people|length }}</b><span>participant{{ "s" if people|length != 1 }}</span></div>
+    <div class="stat mini"><b>{{ "%.0f"|format(route.distance_miles) }}</b><span>route miles</span></div>
+    <div class="stat mini"><b>{{ access_role }}</b><span>access</span></div>
+  </div>
+</div>
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
 <div class="cols">
   <section class="card">
-    <h2>Participants ({{ people|length }})</h2>
+    <div class="section-head compact">
+      <h2>Participants</h2>
+      <span class="muted">{{ people|length }} on roster</span>
+    </div>
     {% if people %}
     <table class="roster">
       <thead><tr><th>Name</th><th>ZIP</th><th>Role</th><th>Car</th><th></th></tr></thead>
       <tbody>
       {% for p in people %}
         <tr>
-          <td>{{ p.name }}{% if household_mates[p.id] %}<br><span class="muted">🏠 with {{ household_mates[p.id]|join(", ") }}</span>{% endif %}</td>
+          <td>
+            <span class="roster-name">
+              <span class="avatar avatar-{{ 'rider' if p.is_rider else 'supporter' }}">{{ p.name|initials }}</span>
+              <span>
+                <b>{{ p.name }}</b>
+                {% if household_mates[p.id] %}<small class="muted">Home with {{ household_mates[p.id]|join(", ") }}</small>{% endif %}
+              </span>
+            </span>
+          </td>
           <td>{{ p.home_zip }}</td>
           <td>
-            {% if p.is_rider %}rider{% else %}supporter{% endif %}
-            {% if p.is_sag_driver %} · SAG{% endif %}
+            <span class="badge role-badge">{{ "rider" if p.is_rider else "supporter" }}</span>
+            {% if p.is_sag_driver %}<span class="sag-badge compact">SAG</span>{% endif %}
           </td>
-          <td>{% if p.has_car %}✓ {{ p.car_combos or "5x2" }}{% else %}—{% endif %}</td>
+          <td>{% if p.has_car %}<span class="badge soft">{{ p.car_combos or "5x2" }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td>
             {% if can_manage_event %}
             <form method="post" action="{{ event_url('/participants/' ~ p.id ~ '/delete') }}">
@@ -41,13 +65,13 @@
     <p class="muted">No participants yet.</p>
     {% endif %}
 
-    <p>
+    <div class="action-row">
       <a class="button big" href="{{ event_url('/plan') }}">Generate plan →</a>
       {% if can_manage_event and people %}<a class="button" href="{{ event_url('/export') }}">Export fixture</a>{% endif %}
-    </p>
+    </div>
 
     {% if can_manage_event %}
-    <details>
+    <details class="share-panel">
       <summary>Share links</summary>
       <p class="muted">Organizer links can manage the roster. Participant links can add people. Read-only links can view the roster and plan.</p>
       <div class="share-links">
@@ -76,7 +100,10 @@
 
   {% if can_add_participants %}
   <section class="card">
-    <h2>Add a participant</h2>
+    <div class="section-head compact">
+      <h2>Add a participant</h2>
+      <span class="muted">person, bike, car</span>
+    </div>
     <form method="post" action="{{ event_url('/participants') }}">
       <div class="grid2">
         <label>Name <input name="name" required></label>
