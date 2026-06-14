@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from . import geo
 from .db import get_session, init_db
@@ -966,6 +966,28 @@ def delete_participant_token(token: str, pid: int):
             s.delete(p)
             s.commit()
     return RedirectResponse(_event_path(access.event), status_code=303)
+
+
+@app.post("/events/{event_id}/delete")
+def delete_event(event_id: int):
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/e/{token}/delete")
+def delete_event_token(token: str):
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role != "organizer":
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+
+    with get_session() as s:
+        ev = s.get(Event, access.event.id)
+        if ev is not None:
+            s.exec(delete(Participant).where(Participant.event_id == ev.id))
+            s.delete(ev)
+            s.commit()
+    return RedirectResponse("/", status_code=303)
 
 
 def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:

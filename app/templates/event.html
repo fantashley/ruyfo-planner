@@ -95,6 +95,12 @@
         </label>
       </div>
     </details>
+    <p>
+      <form method="post" action="{{ event_url('/delete') }}"
+            onsubmit="return confirm('Delete this event and all its participants?');">
+        <button class="link danger" type="submit">Delete event</button>
+      </form>
+    </p>
     {% endif %}
   </section>
 
