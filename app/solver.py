@@ -559,7 +559,29 @@ class _Model:
                 for p in self.people:
                     if p.household != o.household and (p.id, o.id, k, F, H) in self.incar:
                         m.add(self.incar[p.id, o.id, k, F, H] <= sum(ok))
-            # morning: carrying *non-household* others to the start
+            # running to the start from the morning onward (H->S, T_MORNING and
+            # any later leg). The trip only happens if its driver is start-bound
+            # to ride anyway (a rider / ride-joiner) or has opted into ferrying
+            # others in the morning. This gates the whole trip — people, bikes,
+            # and bags — so a supporter who only volunteered, say, a night-before
+            # dropper-home can't be conscripted into a run to the start (not even
+            # for their own household). Night-before H->S legs are the separate
+            # bike-shuttle chore, gated above. Covering every leg (not just the
+            # morning) stops a supporter sneaking to the start during the ride or
+            # evening slots to then reposition to the finish and ferry riders home.
+            for k in range(T_MORNING, NK):
+                if (o.id, k, H, S) not in self.cmove:
+                    continue
+                trip_drivers = [
+                    self.drives[hm.id, o.id, k, H, S]
+                    for hm in household
+                    if (hm.can_drive_morning or hm.is_rider or hm.joins_ride)
+                    and (hm.id, o.id, k, H, S) in self.drives
+                ]
+                m.add(self.cmove[o.id, k, H, S] <= sum(trip_drivers))
+            # morning: carrying *non-household* others to the start is still a
+            # favor that needs a can_drive_morning driver (a rider driving
+            # themselves to the start doesn't implicitly sign up to ferry others).
             ok = willing_drivers(T_MORNING, H, S, "can_drive_morning")
             for p in self.people:
                 if (
@@ -567,6 +589,28 @@ class _Model:
                     and (p.id, o.id, T_MORNING, H, S) in self.incar
                 ):
                     m.add(self.incar[p.id, o.id, T_MORNING, H, S] <= sum(ok))
+
+            # staging a car at the finish (home -> finish) outside the night
+            # before is a day-of positioning run: only a driver who has signed up
+            # for day-of driving may make it — someone willing to drop a car at
+            # the finish, or willing to drive others around the morning of (the
+            # general day-of driving flag, which also covers getting a car to the
+            # finish to take riders home). Night-before H->F legs are gated above
+            # (drop-car OR dropper-home). Without this, a supporter who only
+            # volunteered a dropper-home could drive an empty car to the finish and
+            # use it to ferry riders home — a chore they never signed up for.
+            for k in range(NK):
+                if k in NIGHT_BEFORE:
+                    continue
+                if (o.id, k, H, F) in self.cmove:
+                    m.add(
+                        self.cmove[o.id, k, H, F]
+                        <= sum(
+                            willing_drivers(
+                                k, H, F, "willing_drop_car", "can_drive_morning"
+                            )
+                        )
+                    )
 
     def _build_bikes(self):
         m = self.m

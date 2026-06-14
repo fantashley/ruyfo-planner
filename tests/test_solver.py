@@ -1,5 +1,6 @@
 from ortools.sat.python import cp_model
 
+from app import fixtures
 from app.events import ROUTES
 from app.solver import (
     ALLOWED_ARCS,
@@ -821,3 +822,112 @@ def test_non_rider_joins_the_ride_in_the_sag():
     assert solver.Solve(mb.m) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     assert solver.Value(mb.pat["j", T_RIDE + 1, F]) == 1            # at the finish after the ride
     assert solver.Value(mb.incar["j", "s", T_RIDE, S, F]) == 1      # carried by the SAG on the sweep
+
+
+# A real RUYFO roster (anonymized: names + households relabeled, real ZIPs kept so
+# the plan geometry is unchanged). It was the source of a regression: "Pat", a
+# non-riding supporter who only checked "willing to drive a car-dropper home the
+# night before", was being drafted into driving a rider to the start in the
+# morning AND continuing on through the whole ride and the evening drive home —
+# far beyond the single chore he volunteered for.
+_REGRESSION_ROSTER = {
+    "event": {
+        "name": "Regression RUYFO",
+        "route_key": "faribault_mankato",
+        "has_sag": True,
+    },
+    "participants": [
+        {"name": "Dana Brooks", "home_zip": "55343", "household": "Brooks",
+         "is_rider": True, "num_bikes": 1, "loaner_for": ["Riley Evans"],
+         "car_combos": "5x2, 2x1", "willing_drop_car": True,
+         "willing_drop_bikes_at_start": True, "willing_drive_dropper_home": True,
+         "can_drive_morning": True,
+         "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "unwilling"}},
+        {"name": "Lee Carson", "home_zip": "55391", "household": "Carson",
+         "is_rider": True, "num_bikes": 1, "car_combos": "3x1",
+         "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "unwilling"}},
+        {"name": "Max Carson", "home_zip": "55391", "household": "Carson",
+         "is_rider": True, "num_bikes": 1, "bag_count": 1, "car_combos": "2x2",
+         "willing_drop_bikes_at_start": True, "willing_drive_dropper_home": True,
+         "can_drive_morning": True,
+         "return": {"tonight": "unwilling", "bikeback": "preferred", "ridehome": "unwilling"}},
+        {"name": "Nick Adams", "home_zip": "55422", "is_rider": True,
+         "num_bikes": 1, "car_combos": "2x1", "can_drive_morning": True,
+         "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "unwilling"}},
+        # Pat: the supporter at the heart of the bug — non-rider, ONLY willing to
+        # drive a car-dropper home the night before. No can_drive_morning, no
+        # willing_drop_car. He shares the "Brooks" household with rider Dana.
+        {"name": "Pat Brooks", "home_zip": "55343", "household": "Brooks",
+         "is_rider": False, "has_car": True, "willing_drive_dropper_home": True,
+         "return": {"tonight": "preferred", "bikeback": "acceptable", "ridehome": "acceptable"}},
+        {"name": "Robin Diaz", "home_zip": "55410", "household": "Diaz",
+         "is_rider": False, "car_combos": "7x2", "can_drive_morning": True,
+         "is_sag_driver": True, "sag_extra_miles": 20,
+         "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "unwilling"}},
+        {"name": "Riley Evans", "home_zip": "55408", "is_rider": True,
+         "num_bikes": 0, "car_combos": "2x1", "can_drive_morning": True,
+         "return": {"tonight": "preferred", "bikeback": "unwilling", "ridehome": "unwilling"}},
+        {"name": "Sam Diaz", "home_zip": "55410", "household": "Diaz",
+         "is_rider": True, "num_bikes": 1, "bag_count": 1,
+         "return": {"tonight": "unwilling", "bikeback": "preferred", "ridehome": "unwilling"}},
+    ],
+}
+
+
+def test_dropper_home_only_supporter_is_not_overworked():
+    # Regression guard for the real roster above. Pat volunteered exactly ONE
+    # chore — driving a car-dropper home the night before — so that is the most
+    # he may do. The plan must not deviate: he should never appear in a morning
+    # run to the start, the ride itself, or an evening drive home.
+    problem = fixtures.build_problem(_REGRESSION_ROSTER)
+    sol = solve(problem)
+    assert sol.status in ("optimal", "feasible")
+
+    # Aggregate snapshot: this exact roster solves to this plan. A change here
+    # means the plan deviated and should be re-reviewed.
+    assert sol.total_drive_miles == 591.9
+    assert sol.pref_deviations == 0
+
+    pat_steps = sol.itineraries["Pat Brooks"]
+    travel = [s for s in pat_steps if "→" in s]  # ignore informational notes
+
+    # Every leg Pat takes is a night-before leg — the only phase his volunteered
+    # dropper-home chore lives in. Catching the bug directly: no day-of driving.
+    assert travel, "Pat should still perform his volunteered dropper-home"
+    for step in travel:
+        assert step.startswith("Night before"), f"Pat deviated beyond night-before: {step}"
+    for forbidden in ("Morning of the ride", "The ride", "Evening"):
+        assert not any(forbidden in s for s in pat_steps), (
+            f"Pat was drafted into a {forbidden!r} leg: {pat_steps}"
+        )
+
+    # And he does do his actual chore: drive a car-dropper (Dana) home the night
+    # before — he is the driver, and the dropper rides home with him.
+    assert any(
+        s.startswith("Night before")
+        and "→ home" in s
+        and "Pat Brooks (driver)" in s
+        and "Dana Brooks" in s
+        for s in travel
+    ), f"Pat should drive the dropper home the night before: {travel}"
+
+
+def test_dropper_home_only_supporter_cannot_position_a_car_day_of():
+    # The two direct loopholes that produced the bug are now closed by hard
+    # constraints (not merely the objective): Pat (only willing_drive_dropper_home)
+    # cannot drive his car to the start in the morning, nor stage it at the finish
+    # day-of for an evening pickup. Forcing either is infeasible no matter how the
+    # rest of the plan shakes out.
+    problem = fixtures.build_problem(_REGRESSION_ROSTER)
+
+    def infeasible_when(force):
+        mb = _Model(problem)
+        force(mb)
+        solver = cp_model.CpSolver()
+        return solver.Solve(mb.m) == cp_model.INFEASIBLE
+
+    # a morning run to the start (the morning-ferry chore needs can_drive_morning)
+    assert infeasible_when(lambda mb: mb.m.Add(mb.cmove["Pat Brooks", T_MORNING, H, S] == 1))
+    # staging his car at the finish day-of (a car-drop needs willing_drop_car or
+    # can_drive_morning) — this was the empty-positioning-then-evening-pickup route
+    assert infeasible_when(lambda mb: mb.m.Add(mb.cmove["Pat Brooks", T_MORNING, H, F] == 1))
