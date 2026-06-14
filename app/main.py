@@ -741,11 +741,16 @@ def _resolve_event_access(token: str) -> EventAccess | None:
         return EventAccess(event=ev, role=role)
 
 
+def _sorted_by_name(people: list[Participant]) -> list[Participant]:
+    """Roster order for display: case-insensitive by name."""
+    return sorted(people, key=lambda p: p.name.casefold())
+
+
 def _people_for_event(event_id: int) -> list[Participant]:
     with get_session() as s:
-        return s.exec(
-            select(Participant).where(Participant.event_id == event_id)
-        ).all()
+        return _sorted_by_name(
+            s.exec(select(Participant).where(Participant.event_id == event_id)).all()
+        )
 
 
 def _sag_driver(people: list[Participant]) -> Participant | None:
@@ -1101,9 +1106,9 @@ def export_fixture_token(token: str):
         ev = s.get(Event, access.event.id)
         if ev is None:
             return RedirectResponse("/", status_code=303)
-        people = s.exec(
-            select(Participant).where(Participant.event_id == ev.id)
-        ).all()
+        people = _sorted_by_name(
+            s.exec(select(Participant).where(Participant.event_id == ev.id)).all()
+        )
     body = json.dumps(_fixture_dict(ev, people), indent=2)
     slug = re.sub(r"[^a-z0-9]+", "_", ev.name.lower()).strip("_") or "roster"
     return Response(
@@ -1148,6 +1153,9 @@ def plan_token_page(request: Request, token: str):
         has_sag=ev.has_sag,
     )
     solution = solve(problem)
+    # sort for display only — the solver already ran on the stored order, so the
+    # plan itself is unchanged; this just orders the People cards and unmet list
+    people = _sorted_by_name(people)
     by_id = {str(p.id): p for p in people}
     sag_driver = (
         next((p.name for p in people if p.is_sag_driver), None)
