@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlmodel import delete, select
 
-from . import fixtures, geo, mailer
+from . import __version__, fixtures, geo, mailer
 from .db import get_session, init_db
 from .events import ROUTES, Route, get_route
 from .models import Event, Participant, to_person
@@ -34,6 +34,7 @@ RETURN_LABELS = {
 }
 templates.env.globals["RETURN_LABELS"] = RETURN_LABELS
 templates.env.globals["ROUTES"] = ROUTES
+templates.env.globals["APP_VERSION"] = __version__
 
 RETURN_SHORT_LABELS = {
     ReturnOption.DRIVE_HOME_TONIGHT: "Home tonight",
