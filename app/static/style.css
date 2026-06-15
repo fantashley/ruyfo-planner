@@ -62,6 +62,10 @@ footer {
   max-width: 1000px; margin: 48px auto 32px; padding: 20px 20px 0;
   border-top: 1px solid var(--line); color: var(--muted);
 }
+footer .version {
+  display: block; margin-top: 8px;
+  font-variant-numeric: tabular-nums; opacity: .7;
+}
 h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; letter-spacing: -.022em;
   font-weight: 800; color: var(--ink); }
 h2 { margin: 0 0 2px; font-size: 20px; letter-spacing: -.012em; font-weight: 750; color: var(--ink); }
