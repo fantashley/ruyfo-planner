@@ -23,6 +23,22 @@
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
+{% if just_created %}
+<div class="card save-link-notice">
+  <h2>Save this link!</h2>
+  <p class="muted">
+    This organizer link is the only way back in to manage your event.
+    Bookmark it{% if emailed_link %} — we've also emailed a copy to you{% endif %}.
+    {% if not emailed_link %}There's no account and no password, so if you lose
+    it the event can't be recovered.{% endif %}
+  </p>
+  <span class="share-row">
+    <input readonly value="{{ share_url(role='organizer') }}">
+    <button type="button" class="copy-link">Copy</button>
+  </span>
+</div>
+{% endif %}
+
 <div class="cols">
   <section class="card">
     <div class="section-head compact">
@@ -323,6 +339,21 @@
       });
     });
   });
+
+{% if can_manage_event %}
+  // Remember events created/managed in this browser so the home page can offer
+  // a way back without needing email — a zero-infrastructure complement to the
+  // emailed recovery links. Only the organizer link is stored, and only locally.
+  try {
+    var KEY = "ruyfo.recentEvents";
+    var url = {{ share_url(role='organizer') | tojson }};
+    var name = {{ event.name | tojson }};
+    var recent = JSON.parse(localStorage.getItem(KEY) || "[]");
+    recent = recent.filter(function (e) { return e && e.url !== url; });
+    recent.unshift({ name: name, url: url });
+    localStorage.setItem(KEY, JSON.stringify(recent.slice(0, 20)));
+  } catch (err) { /* private mode / disabled storage — no-op */ }
+{% endif %}
 })();
 </script>
 {% endblock %}

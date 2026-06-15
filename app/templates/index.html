@@ -8,6 +8,20 @@
   </div>
 </div>
 
+{% if recovered %}
+<div class="card recover-notice">
+  <p>If that email created any events, we've sent the links to it. Check your inbox.</p>
+</div>
+{% endif %}
+
+<section class="card recent-events" id="recent-events" hidden>
+  <div class="section-head compact">
+    <h2>Your recent events</h2>
+    <span class="muted">saved in this browser</span>
+  </div>
+  <ul class="event-list" id="recent-events-list"></ul>
+</section>
+
 <section class="card event-form-card">
   <div class="section-head compact">
     <h2>New event</h2>
@@ -17,6 +31,14 @@
     <label>Name
       <input name="name" placeholder="e.g. Fall RUYFO 2026" required>
     </label>
+
+    {% if email_enabled %}
+    <label>Your email <span class="muted">(optional)</span>
+      <input name="organizer_email" type="email" placeholder="so you can recover your link later">
+      <small class="muted">We'll email you the organizer link. Skip it and the
+        link on the next page is the <em>only</em> way back to your event.</small>
+    </label>
+    {% endif %}
 
     <fieldset class="route-picker">
       <legend>Route</legend>
@@ -39,4 +61,44 @@
     <button class="primary-action" type="submit">Create event</button>
   </form>
 </section>
+
+{% if email_enabled %}
+<section class="card recover-card">
+  <div class="section-head compact">
+    <h2>Lost your link?</h2>
+  </div>
+  <p class="muted">If you gave your email when creating an event, we'll send the
+    organizer links for all your events to it.</p>
+  <form method="post" action="/recover" class="recover-form">
+    <label>Your email
+      <input name="email" type="email" placeholder="you@example.com" required>
+    </label>
+    <button type="submit">Email me my links</button>
+  </form>
+</section>
+{% endif %}
+
+<script>
+(function () {
+  // Render events this browser remembers creating (see event.html). No server
+  // round-trip and no email needed — purely a local convenience.
+  try {
+    var recent = JSON.parse(localStorage.getItem("ruyfo.recentEvents") || "[]");
+    if (!recent.length) return;
+    var list = document.getElementById("recent-events-list");
+    recent.forEach(function (e) {
+      if (!e || !e.url) return;
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = e.url;
+      a.textContent = e.name || e.url;
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    if (list.children.length) {
+      document.getElementById("recent-events").hidden = false;
+    }
+  } catch (err) { /* private mode / disabled storage — no-op */ }
+})();
+</script>
 {% endblock %}

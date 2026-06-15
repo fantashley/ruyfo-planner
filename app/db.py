@@ -17,6 +17,7 @@ _SQLITE_SCHEMA_ADDITIONS = {
         "organizer_token": "VARCHAR NOT NULL DEFAULT ''",
         "participant_token": "VARCHAR NOT NULL DEFAULT ''",
         "readonly_token": "VARCHAR NOT NULL DEFAULT ''",
+        "organizer_email": "VARCHAR NOT NULL DEFAULT ''",
     },
     "participant": {
         "loaner_for": "VARCHAR NOT NULL DEFAULT ''",
