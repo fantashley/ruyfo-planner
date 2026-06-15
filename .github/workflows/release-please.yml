@@ -14,6 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           # Defaults to release-please-config.json and .release-please-manifest.json
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Keep a floating `release` branch pointing at the most recent release, so
+      # downstream Nix flakes can track releases (not main) by pinning
+      # `github:fantashley/ruyfo-planner/release` and running `nix flake update`.
+      - name: Move the release branch to the new release
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/git/refs/heads/release" \
+            -f sha="${{ steps.release.outputs.sha }}" -F force=true \
+          || gh api -X POST "repos/${{ github.repository }}/git/refs" \
+               -f ref="refs/heads/release" -f sha="${{ steps.release.outputs.sha }}"
