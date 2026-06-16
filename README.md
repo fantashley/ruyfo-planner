@@ -8,8 +8,8 @@ their bikes, and their cars home — honoring each person's stated preferences.
 
 Two routes are built in:
 
-- **Faribault → Mankato** (`55021` → `56001`)
-- **Wayzata → Hutchinson** (`55391` → `55350`)
+- **Sakatah Trail** — Faribault → Mankato (`55021` → `56001`)
+- **Hutchinson Route** — Wayzata → Hutchinson (`55391` → `55350`)
 
 ## How it works
 
@@ -75,6 +75,29 @@ Open http://127.0.0.1:8000, create an event, add participants, and click
 **Generate plan**. The database is a local SQLite file (`ruyfo.db`; override with
 the `RUYFO_DB` env var).
 
+There are no accounts. Each event is reached through a secret **organizer link**
+(`/e/<token>`) handed out when you create it — that link is how you get back in
+to manage the roster, so keep it safe. You can also seed an event from a JSON
+roster with the **Import data** button and pull the current roster back out with
+**Export data**.
+
+### Email recovery (optional)
+
+If you supply an organizer email when creating an event, the app emails you the
+organizer link, and the home page's **Lost your link?** form will re-send the
+links for every event under that address. Email is off until SMTP is configured
+via the environment (defaults target Fastmail); without it the app and tests run
+fine and the recovery UI hides itself. The knobs:
+
+| Var | Default | What |
+|-----|---------|------|
+| `RUYFO_SMTP_HOST` | `smtp.fastmail.com` | SMTP server |
+| `RUYFO_SMTP_PORT` | `465` | SMTP port (implicit TLS) |
+| `RUYFO_SMTP_USER` | — | SMTP username |
+| `RUYFO_SMTP_PASSWORD` | — | SMTP password (or use the `_FILE` form) |
+| `RUYFO_SMTP_PASSWORD_FILE` | — | path to read the password from (for secret managers) |
+| `RUYFO_EMAIL_FROM` | falls back to `RUYFO_SMTP_USER` | From address |
+
 ## Fixtures (fixed rosters for testing)
 
 Keep a real roster as JSON in `fixtures/` and re-check plans as the model changes
@@ -98,7 +121,9 @@ hold personal data — only the fictional `example.json` is tracked.
 
 `tests/test_geo.py` covers the distance helpers; `tests/test_solver.py` covers
 the optimizer with hand-built scenarios (single-rider bike-back, drop-car +
-supporter, SAG wagon, households, and an over-constrained infeasible case).
+supporter, SAG wagon, households, and an over-constrained infeasible case);
+`tests/test_fixtures.py` covers loading rosters and the SQLite migrations;
+`tests/test_recovery.py` covers organizer-link email recovery.
 
 ## Layout
 
@@ -108,6 +133,9 @@ supporter, SAG wagon, households, and an over-constrained infeasible case).
 | `app/geo.py` | Offline ZIP → lat/lon + haversine distances |
 | `app/events.py` | The two routes |
 | `app/models.py` | SQLite tables + conversion to solver inputs |
+| `app/db.py` | SQLite engine, sessions, and lightweight migrations |
+| `app/fixtures.py` | Load JSON rosters into a solver `Problem` or the DB |
+| `app/mailer.py` | Outbound SMTP for organizer-link recovery |
 | `app/main.py` | FastAPI routes |
 | `app/templates/`, `app/static/` | The web UI |
 
