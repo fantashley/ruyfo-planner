@@ -955,7 +955,7 @@ def _resolve_participant_form(
     household: str,
     is_rider: str | None,
     joins_ride: str | None,
-    num_bikes: int,
+    rides_loaner: str | None,
     loaner_for: list[str],
     has_overnight_bag: str | None,
     car_combos: str,
@@ -1025,7 +1025,9 @@ def _resolve_participant_form(
         "is_rider": riding,
         # joining the SAG only applies to non-riders
         "joins_ride": _checkbox(joins_ride) and not riding,
-        "num_bikes": num_bikes if riding else 0,  # "bikes I'll ride" only applies to riders
+        # a rider rides exactly one bike — their own (1), or a borrowed loaner (0,
+        # since the loan is accounted for on the lender). Non-riders carry none.
+        "num_bikes": 0 if (not riding or _checkbox(rides_loaner)) else 1,
         "loaner_for": ",".join(b for b in loaner_for if b),
         "bag_count": 1 if _checkbox(has_overnight_bag) else 0,
         "has_car": has_car,
@@ -1052,7 +1054,7 @@ def add_participant(
     household: str = Form(""),  # id of an existing participant to share a household with
     is_rider: str | None = Form(None),
     joins_ride: str | None = Form(None),
-    num_bikes: int = Form(1),
+    rides_loaner: str | None = Form(None),
     loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
     has_overnight_bag: str | None = Form(None),
     car_combos: str = Form(""),
@@ -1079,7 +1081,7 @@ def add_participant_token(
     household: str = Form(""),  # id of an existing participant to share a household with
     is_rider: str | None = Form(None),
     joins_ride: str | None = Form(None),
-    num_bikes: int = Form(1),
+    rides_loaner: str | None = Form(None),
     loaner_for: list[str] = Form(default=[]),  # ids of borrowers (multi-select)
     has_overnight_bag: str | None = Form(None),
     car_combos: str = Form(""),
@@ -1105,7 +1107,7 @@ def add_participant_token(
         fields, error = _resolve_participant_form(
             s, ev, None,
             name=name, email=email, home_zip=home_zip, household=household,
-            is_rider=is_rider, joins_ride=joins_ride, num_bikes=num_bikes,
+            is_rider=is_rider, joins_ride=joins_ride, rides_loaner=rides_loaner,
             loaner_for=loaner_for, has_overnight_bag=has_overnight_bag,
             car_combos=car_combos, willing_drop_car=willing_drop_car,
             willing_drop_bikes_at_start=willing_drop_bikes_at_start,
@@ -1136,7 +1138,7 @@ def update_participant_token(
     household: str = Form(""),
     is_rider: str | None = Form(None),
     joins_ride: str | None = Form(None),
-    num_bikes: int = Form(1),
+    rides_loaner: str | None = Form(None),
     loaner_for: list[str] = Form(default=[]),
     has_overnight_bag: str | None = Form(None),
     car_combos: str = Form(""),
@@ -1165,7 +1167,7 @@ def update_participant_token(
         fields, error = _resolve_participant_form(
             s, ev, pid,
             name=name, email=email, home_zip=home_zip, household=household,
-            is_rider=is_rider, joins_ride=joins_ride, num_bikes=num_bikes,
+            is_rider=is_rider, joins_ride=joins_ride, rides_loaner=rides_loaner,
             loaner_for=loaner_for, has_overnight_bag=has_overnight_bag,
             car_combos=car_combos, willing_drop_car=willing_drop_car,
             willing_drop_bikes_at_start=willing_drop_bikes_at_start,

@@ -133,8 +133,7 @@
       </div>
     </details>
     <p>
-      <form method="post" action="{{ event_url('/delete') }}"
-            onsubmit="return confirm('Delete this event and all its participants?');">
+      <form method="post" action="{{ event_url('/delete') }}" id="delete-event-form">
         <button class="link danger" type="submit">Delete event</button>
       </form>
     </p>
@@ -167,11 +166,8 @@
       <fieldset>
         <legend>Riding &amp; gear</legend>
         <label class="check"><input type="checkbox" name="is_rider" id="is_rider"{% if not editing or editing.is_rider %} checked{% endif %}> I'm riding the route</label>
-        <label id="bikes-field">Bikes I'll ride
-          <input name="num_bikes" type="number" min="0" value="{{ editing.num_bikes if editing else 1 }}">
-          <small class="muted">Your own bike(s) only — don't count loaners you bring
-          for others (add those below). Set 0 if you'll ride a borrowed loaner.</small>
-        </label>
+        <label class="check" id="bikes-field"><input type="checkbox" name="rides_loaner"{% if editing and editing.is_rider and editing.num_bikes == 0 %} checked{% endif %}>
+          I'll ride a borrowed loaner instead of bringing my own bike</label>
         <label>I'm bringing spare/loaner bikes for
           <select name="loaner_for" multiple size="3">
             {% for q in people if q.is_rider and (not editing or q.id != editing.id) %}
@@ -353,6 +349,23 @@
     recent.unshift({ name: name, url: url });
     localStorage.setItem(KEY, JSON.stringify(recent.slice(0, 20)));
   } catch (err) { /* private mode / disabled storage — no-op */ }
+
+  // Deleting the event should also forget it locally, so it stops showing up
+  // under "Your recent events" on the home page (the link is now dead).
+  var deleteForm = document.getElementById("delete-event-form");
+  if (deleteForm) deleteForm.addEventListener("submit", function (event) {
+    if (!confirm("Delete this event and all its participants?")) {
+      event.preventDefault();
+      return;
+    }
+    try {
+      var KEY = "ruyfo.recentEvents";
+      var url = {{ share_url(role='organizer') | tojson }};
+      var recent = JSON.parse(localStorage.getItem(KEY) || "[]");
+      recent = recent.filter(function (e) { return e && e.url !== url; });
+      localStorage.setItem(KEY, JSON.stringify(recent));
+    } catch (err) { /* private mode / disabled storage — no-op */ }
+  });
 {% endif %}
 })();
 </script>
