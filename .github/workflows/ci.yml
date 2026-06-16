@@ -15,9 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The stated floor (pyproject requires-python >= 3.11) and the version
-        # the app is deployed on (flake.nix uses python313).
-        python-version: ["3.11", "3.13"]
+        # Matches the supported floor (pyproject requires-python >= 3.13) and the
+        # version the app is deployed on (flake.nix uses python313).
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
