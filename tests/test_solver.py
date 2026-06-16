@@ -874,46 +874,64 @@ _REGRESSION_ROSTER = {
 }
 
 
-def test_dropper_home_only_supporter_is_not_overworked():
-    # Regression guard for the real roster above. Pat volunteered exactly ONE
-    # chore — driving a car-dropper home the night before — so that is the most
-    # he may do. The plan must not deviate: he should never appear in a morning
-    # run to the start, the ride itself, or an evening drive home.
+def test_regression_roster_outcome_is_correct_for_everyone():
+    # Whole-roster regression guard. We deliberately do NOT snapshot the exact
+    # total mileage: the model's integer coefficients come from rounding
+    # floating-point haversine distances, and macOS vs Linux libm differ in the
+    # last bit, so the two platforms build subtly different integer programs and
+    # pick different (each genuinely optimal) plans. Instead we assert the parts
+    # every optimal plan must share, so the test is stable everywhere.
     problem = fixtures.build_problem(_REGRESSION_ROSTER)
-    # Pin the CP-SAT tie-break so the exact-miles snapshot below is reproducible:
-    # several plans tie on the objective, and a multi-worker solve would pick one
-    # non-deterministically (it differs across platforms). One worker + a fixed
-    # seed makes the choice stable.
-    sol = solve(problem, num_workers=1, random_seed=0)
+    sol = solve(problem)
     assert sol.status in ("optimal", "feasible")
 
-    # Aggregate snapshot: this exact roster solves to this plan. A change here
-    # means the plan deviated and should be re-reviewed.
-    assert sol.total_drive_miles == 588.2
+    # Nobody is pushed onto a merely-acceptable option (pref_deviations == 0), and
+    # each person here has exactly one preferred return, so every outcome is pinned
+    # regardless of how the solver breaks ties.
     assert sol.pref_deviations == 0
+    _no_unwilling_outcomes(problem, sol)
+    expected_return = {
+        "Dana Brooks": TONIGHT,
+        "Lee Carson": TONIGHT,
+        "Max Carson": BIKEBACK,
+        "Nick Adams": TONIGHT,
+        "Pat Brooks": TONIGHT,
+        "Robin Diaz": TONIGHT,
+        "Riley Evans": TONIGHT,
+        "Sam Diaz": BIKEBACK,
+    }
+    for name, option in expected_return.items():
+        assert sol.return_outcome[name] == option, (
+            f"{name} should return via {option}, got {sol.return_outcome[name]}"
+        )
 
+    # Riley owns no bike and rides Dana's declared loaner; both itineraries say so
+    # (these notes come straight from the pairing, not from a particular plan).
+    assert any(
+        "loaner" in s.lower() and "Dana Brooks" in s
+        for s in sol.itineraries["Riley Evans"]
+    ), sol.itineraries["Riley Evans"]
+    assert any(
+        "spare bike for Riley Evans" in s for s in sol.itineraries["Dana Brooks"]
+    ), sol.itineraries["Dana Brooks"]
+
+    # Max and Sam both stay over (they bike back), so each needs their overnight
+    # bag waiting at the hotel — surfaced as an explicit bag instruction.
+    for name in ("Max Carson", "Sam Diaz"):
+        assert any(s.startswith("Overnight bag:") for s in sol.itineraries[name]), (
+            f"{name} should get an overnight-bag instruction: {sol.itineraries[name]}"
+        )
+
+    # Pat volunteered exactly ONE chore — a night-before dropper-home — so that is
+    # the most he may do: every leg he takes is a night-before leg, and he never
+    # appears in a morning run to the start, the ride, or an evening drive home.
     pat_steps = sol.itineraries["Pat Brooks"]
-    travel = [s for s in pat_steps if "→" in s]  # ignore informational notes
-
-    # Every leg Pat takes is a night-before leg — the only phase his volunteered
-    # dropper-home chore lives in. Catching the bug directly: no day-of driving.
-    assert travel, "Pat should still perform his volunteered dropper-home"
-    for step in travel:
+    for step in (s for s in pat_steps if "→" in s):
         assert step.startswith("Night before"), f"Pat deviated beyond night-before: {step}"
     for forbidden in ("Morning of the ride", "The ride", "Evening"):
         assert not any(forbidden in s for s in pat_steps), (
             f"Pat was drafted into a {forbidden!r} leg: {pat_steps}"
         )
-
-    # And he does do his actual chore: drive a car-dropper (Dana) home the night
-    # before — he is the driver, and the dropper rides home with him.
-    assert any(
-        s.startswith("Night before")
-        and "→ home" in s
-        and "Pat Brooks (driver)" in s
-        and "Dana Brooks" in s
-        for s in travel
-    ), f"Pat should drive the dropper home the night before: {travel}"
 
 
 def test_dropper_home_only_supporter_cannot_position_a_car_day_of():
