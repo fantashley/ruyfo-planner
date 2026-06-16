@@ -1279,11 +1279,15 @@ def _fixture_dict(ev: Event, people: list[Participant]) -> dict[str, Any]:
                 entry[flag] = True
         if p.is_sag_driver:
             entry["sag_extra_miles"] = p.sag_extra_miles
-        entry["return"] = {
-            "tonight": p.pref_tonight,
-            "bikeback": p.pref_bikeback,
-            "ridehome": p.pref_ridehome,
-        }
+        # return preferences only apply to people who travel back from the finish:
+        # riders, ride-joiners, and the SAG driver. Plain supporters never return
+        # from the finish, so their (defaulted, unused) prefs don't belong here.
+        if p.is_rider or p.joins_ride or p.is_sag_driver:
+            entry["return"] = {
+                "tonight": p.pref_tonight,
+                "bikeback": p.pref_bikeback,
+                "ridehome": p.pref_ridehome,
+            }
         participants.append(entry)
 
     return {
