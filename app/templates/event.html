@@ -133,8 +133,7 @@
       </div>
     </details>
     <p>
-      <form method="post" action="{{ event_url('/delete') }}"
-            onsubmit="return confirm('Delete this event and all its participants?');">
+      <form method="post" action="{{ event_url('/delete') }}" id="delete-event-form">
         <button class="link danger" type="submit">Delete event</button>
       </form>
     </p>
@@ -350,6 +349,23 @@
     recent.unshift({ name: name, url: url });
     localStorage.setItem(KEY, JSON.stringify(recent.slice(0, 20)));
   } catch (err) { /* private mode / disabled storage — no-op */ }
+
+  // Deleting the event should also forget it locally, so it stops showing up
+  // under "Your recent events" on the home page (the link is now dead).
+  var deleteForm = document.getElementById("delete-event-form");
+  if (deleteForm) deleteForm.addEventListener("submit", function (event) {
+    if (!confirm("Delete this event and all its participants?")) {
+      event.preventDefault();
+      return;
+    }
+    try {
+      var KEY = "ruyfo.recentEvents";
+      var url = {{ share_url(role='organizer') | tojson }};
+      var recent = JSON.parse(localStorage.getItem(KEY) || "[]");
+      recent = recent.filter(function (e) { return e && e.url !== url; });
+      localStorage.setItem(KEY, JSON.stringify(recent));
+    } catch (err) { /* private mode / disabled storage — no-op */ }
+  });
 {% endif %}
 })();
 </script>
