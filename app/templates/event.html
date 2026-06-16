@@ -167,11 +167,8 @@
       <fieldset>
         <legend>Riding &amp; gear</legend>
         <label class="check"><input type="checkbox" name="is_rider" id="is_rider"{% if not editing or editing.is_rider %} checked{% endif %}> I'm riding the route</label>
-        <label id="bikes-field">Bikes I'll ride
-          <input name="num_bikes" type="number" min="0" value="{{ editing.num_bikes if editing else 1 }}">
-          <small class="muted">Your own bike(s) only — don't count loaners you bring
-          for others (add those below). Set 0 if you'll ride a borrowed loaner.</small>
-        </label>
+        <label class="check" id="bikes-field"><input type="checkbox" name="rides_loaner"{% if editing and editing.is_rider and editing.num_bikes == 0 %} checked{% endif %}>
+          I'll ride a borrowed loaner instead of bringing my own bike</label>
         <label>I'm bringing spare/loaner bikes for
           <select name="loaner_for" multiple size="3">
             {% for q in people if q.is_rider and (not editing or q.id != editing.id) %}
