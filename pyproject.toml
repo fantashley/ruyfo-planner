@@ -7,7 +7,7 @@ name = "ruyfo-planner"
 version = "0.2.0"
 description = "Logistics planner for the RUYFO point-to-point bike event"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi",
     "uvicorn",
