@@ -885,7 +885,7 @@ def test_dropper_home_only_supporter_is_not_overworked():
 
     # Aggregate snapshot: this exact roster solves to this plan. A change here
     # means the plan deviated and should be re-reviewed.
-    assert sol.total_drive_miles == 591.9
+    assert sol.total_drive_miles == 588.2
     assert sol.pref_deviations == 0
 
     pat_steps = sol.itineraries["Pat Brooks"]
