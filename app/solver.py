@@ -953,11 +953,23 @@ class _Model:
 # --------------------------------------------------------------------------- #
 
 
-def solve(problem: Problem, time_limit_s: float = 20.0) -> Solution:
+def solve(
+    problem: Problem,
+    time_limit_s: float = 20.0,
+    *,
+    num_workers: int = 8,
+    random_seed: int | None = None,
+) -> Solution:
     mb = _Model(problem)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_s
-    solver.parameters.num_search_workers = 8
+    solver.parameters.num_search_workers = num_workers
+    # When several plans tie on the objective, CP-SAT returns an arbitrary one;
+    # with multiple workers that choice is non-deterministic across runs and
+    # platforms. Tests that snapshot an exact plan pass num_workers=1 and a fixed
+    # seed to pin the tie-break; the app leaves the defaults for speed.
+    if random_seed is not None:
+        solver.parameters.random_seed = random_seed
     status = solver.solve(mb.m)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):

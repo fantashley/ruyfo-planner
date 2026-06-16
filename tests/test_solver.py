@@ -880,7 +880,11 @@ def test_dropper_home_only_supporter_is_not_overworked():
     # he may do. The plan must not deviate: he should never appear in a morning
     # run to the start, the ride itself, or an evening drive home.
     problem = fixtures.build_problem(_REGRESSION_ROSTER)
-    sol = solve(problem)
+    # Pin the CP-SAT tie-break so the exact-miles snapshot below is reproducible:
+    # several plans tie on the objective, and a multi-worker solve would pick one
+    # non-deterministically (it differs across platforms). One worker + a fixed
+    # seed makes the choice stable.
+    sol = solve(problem, num_workers=1, random_seed=0)
     assert sol.status in ("optimal", "feasible")
 
     # Aggregate snapshot: this exact roster solves to this plan. A change here
