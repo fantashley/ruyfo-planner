@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -26,6 +27,12 @@ class Event(SQLModel, table=True):
     # Optional: lets the creator recover their organizer link by email. Stored
     # normalized (lowercased/stripped); "" means they declined to give one.
     organizer_email: str = Field(default="", index=True)
+    # Set in Python at insert time (SQLite can't default a column to
+    # CURRENT_TIMESTAMP via ALTER TABLE). NULL on events that predate this
+    # column, whose real creation date is unknown.
+    created_at: Optional[datetime] = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=True
+    )
 
 
 class Participant(SQLModel, table=True):
