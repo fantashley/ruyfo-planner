@@ -82,6 +82,19 @@ in
       description = "Additional environment variables for the planner service.";
     };
 
+    originSecretFile = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = ''
+        Path to a file holding the shared secret that the fronting Fastly
+        service stamps on origin requests as the X-Origin-Secret header. When
+        set, the app rejects any request lacking it (HTTP 403) — the way to
+        keep direct-to-origin bot traffic out when the host can't be firewalled
+        to Fastly's IPs. Point this at a secret-manager path (agenix/sops),
+        not a Nix store path. Null leaves the check disabled.
+      '';
+    };
+
     backup = {
       enable = mkOption {
         type = types.bool;
@@ -133,6 +146,8 @@ in
 
       environment = {
         RUYFO_DB = "${cfg.dataDir}/ruyfo.db";
+      } // lib.optionalAttrs (cfg.originSecretFile != null) {
+        RUYFO_ORIGIN_SECRET_FILE = toString cfg.originSecretFile;
       } // cfg.environment;
 
       serviceConfig = {

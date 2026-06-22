@@ -13,6 +13,8 @@ import os
 import smtplib
 from email.message import EmailMessage
 
+from . import mailcap
+
 log = logging.getLogger("ruyfo.mailer")
 
 
@@ -56,14 +58,21 @@ def is_configured() -> bool:
     return bool(_user() and _password() and _from())
 
 
-def send(to: str, subject: str, body: str) -> bool:
+def send(to: str, subject: str, body: str, kind: str = "") -> bool:
     """Send a plain-text email. Returns True if it went out.
 
     Never raises into the request path: a misconfigured or flaky SMTP server
     logs a warning and returns False rather than 500-ing the page.
+
+    Subject to the outbound rate caps in :mod:`app.mailcap`: a send that would
+    exceed the global or per-recipient 24h cap is suppressed (returns False)
+    rather than relayed. ``kind`` is a free-form tag stored in the audit trail.
     """
     if not is_configured():
         log.info("SMTP not configured; skipping email to %s", to)
+        return False
+
+    if not mailcap.allow(to):
         return False
 
     msg = EmailMessage()
@@ -86,4 +95,5 @@ def send(to: str, subject: str, body: str) -> bool:
     except (OSError, smtplib.SMTPException) as exc:
         log.warning("failed to send email to %s: %s", to, exc)
         return False
+    mailcap.record(to, kind)
     return True
