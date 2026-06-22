@@ -97,6 +97,28 @@ fine and the recovery UI hides itself. The knobs:
 | `RUYFO_SMTP_PASSWORD` | — | SMTP password (or use the `_FILE` form) |
 | `RUYFO_SMTP_PASSWORD_FILE` | — | path to read the password from (for secret managers) |
 | `RUYFO_EMAIL_FROM` | falls back to `RUYFO_SMTP_USER` | From address |
+| `RUYFO_EMAIL_DAILY_CAP` | `100` | Max emails sent in any rolling 24h window (anti-relay backstop) |
+| `RUYFO_EMAIL_RECIPIENT_DAILY_CAP` | `5` | Max emails to a single address in a rolling 24h window |
+
+The two caps are an origin-side safety net: because the event-creation and
+"Lost your link?" forms are unauthenticated, a bot can ask the app to mail an
+arbitrary address. The caps bound how much mail can leave (globally and per
+recipient) if anything slips past the edge defenses. They live at the single
+`app/mailer.send` chokepoint and are backed by a small `emailsend` audit table.
+
+### Locking the app to a fronting CDN (optional)
+
+If the app sits behind a CDN/WAF that handles the bot challenge and rate
+limiting (see [`terraform/fastly/`](terraform/fastly/) for a Fastly setup), set
+a shared secret so the app rejects (HTTP 403) any request that reached the
+origin directly — the way to keep bots out when the host serves other sites and
+can't be IP-firewalled. Configure the CDN to stamp it on every origin request
+as the `X-Origin-Secret` header, and tell the app the same value:
+
+| Var | Default | What |
+|-----|---------|------|
+| `RUYFO_ORIGIN_SECRET` | — | Shared secret; requests without a matching `X-Origin-Secret` header get 403. Empty disables the check |
+| `RUYFO_ORIGIN_SECRET_FILE` | — | Path to read the secret from instead (for secret managers) |
 
 ## Fixtures (fixed rosters for testing)
 

@@ -35,7 +35,7 @@ def _setup(monkeypatch):
     monkeypatch.setattr(
         main.mailer,
         "send",
-        lambda to, subject, body: sent.append({"to": to, "subject": subject, "body": body}) or True,
+        lambda to, subject, body, kind="": sent.append({"to": to, "subject": subject, "body": body}) or True,
     )
     return engine, sent
 

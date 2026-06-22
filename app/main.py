@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hmac
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -689,6 +691,37 @@ templates.env.filters["chronological_moves"] = _chronological_moves
 templates.env.filters["glance_moves"] = _glance_moves
 
 
+def _origin_secret() -> str:
+    """Shared secret proving a request actually came through our Fastly service.
+
+    Set by the edge (the ``X-Origin-Secret`` header in terraform/fastly), this
+    lets the app reject traffic that reached the origin directly — the defense
+    when the origin host can't be firewalled to Fastly's IPs (e.g. it serves
+    other sites too). Mirrors the mailer's password handling: prefer a file
+    (secret-manager friendly) over an inline env var. Empty disables the check.
+    """
+    path = os.environ.get("RUYFO_ORIGIN_SECRET_FILE", "").strip()
+    if path:
+        try:
+            return open(path, encoding="utf-8").read().strip()
+        except OSError:
+            return ""
+    return os.environ.get("RUYFO_ORIGIN_SECRET", "").strip()
+
+
+@app.middleware("http")
+async def _require_origin_secret(request: Request, call_next):
+    """Reject requests that didn't come through Fastly, when a secret is set."""
+    secret = _origin_secret()
+    if secret:
+        provided = request.headers.get("x-origin-secret", "")
+        # constant-time compare so a wrong header can't be timed out character
+        # by character
+        if not hmac.compare_digest(provided, secret):
+            return Response("Forbidden", status_code=403, media_type="text/plain")
+    return await call_next(request)
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
@@ -873,6 +906,7 @@ def recover_links(request: Request, email: str = Form("")):
                 "Here are the organizer links for the events you've created:\n\n"
                 + "\n".join(lines)
                 + "\n\nKeep these safe — they're how you get back in to manage each roster.\n",
+                kind="recovery",
             )
     return RedirectResponse("/?recovered=1", status_code=303)
 
@@ -913,6 +947,7 @@ manage the roster:
 Lost it later? Visit the planner home page and use "Lost your link?" to
 have all your event links emailed again.
 """,
+        kind="organizer_link",
     )
 
 
