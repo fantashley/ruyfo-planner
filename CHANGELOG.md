@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/fantashley/ruyfo-planner/compare/v0.2.0...v0.3.0) (2026-06-22)
+
+
+### Features
+
+* **event:** record creation timestamp ([#19](https://github.com/fantashley/ruyfo-planner/issues/19)) ([49a7c27](https://github.com/fantashley/ruyfo-planner/commit/49a7c27321a6fba4c46c7e6071dfdcffe29322b8))
+* **security:** defend the email forms against bot abuse ([#20](https://github.com/fantashley/ruyfo-planner/issues/20)) ([b6830bc](https://github.com/fantashley/ruyfo-planner/commit/b6830bc5e0c22d5dd77af40b9ea1fa9cb1a1ec92))
+* simpler riding input and recent-events cleanup ([#18](https://github.com/fantashley/ruyfo-planner/issues/18)) ([a7ddea6](https://github.com/fantashley/ruyfo-planner/commit/a7ddea65afb2a4858613b4186b5bdb47cf8f15d6))
+
+
+### Bug Fixes
+
+* **export:** omit return preferences for non-SAG supporters ([#17](https://github.com/fantashley/ruyfo-planner/issues/17)) ([2bb116e](https://github.com/fantashley/ruyfo-planner/commit/2bb116eb61b1ecdb1dfc787caab9002878ce4e98))
+
+
+### Documentation
+
+* refresh README for organizer links, email recovery, and new modules ([#12](https://github.com/fantashley/ruyfo-planner/issues/12)) ([5093ff6](https://github.com/fantashley/ruyfo-planner/commit/5093ff68a31e1d9582e83e2a1c7b575c32cbc32f))
+
 ## [0.2.0](https://github.com/fantashley/ruyfo-planner/compare/v0.1.0...v0.2.0) (2026-06-15)
 
 

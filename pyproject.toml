@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ruyfo-planner"
-version = "0.2.0"
+version = "0.3.0"
 description = "Logistics planner for the RUYFO point-to-point bike event"
 license = "MIT"
 requires-python = ">=3.13"
