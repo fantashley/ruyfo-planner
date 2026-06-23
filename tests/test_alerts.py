@@ -1,4 +1,9 @@
-"""Tests for operator alerts on event creation / recovery-email confirmation."""
+"""Tests for operator alerts: event-creation notice + outbound-mail monitoring.
+
+The point of these alerts is to watch how much mail the public forms drive
+through the SMTP setup (abuse detection), so the per-send alert fires whenever
+an email actually goes out — not only on a successful confirmation click.
+"""
 
 from email.message import EmailMessage
 
@@ -49,53 +54,36 @@ def _setup(monkeypatch):
 
 
 def test_create_event_alerts_operator_with_no_email_yet(monkeypatch):
-    _setup_engine, alerts = _setup(monkeypatch)
+    _engine, alerts = _setup(monkeypatch)
 
     main.create_event(_request(), name="Fall Ride", route_key="faribault_mankato")
 
     assert len(alerts) == 1
-    assert alerts[0]["kind"] == "event_created"
-    assert "Fall Ride" in alerts[0]["subject"]
     body = alerts[0]["body"]
+    assert "Fall Ride" in alerts[0]["subject"]
     assert "Fall Ride" in body
     assert "Sakatah Trail" in body  # route name, not the raw key
     assert "(none)" in body  # no recovery email at creation by design
 
 
-def test_confirm_recovery_email_alerts_operator_with_the_email(monkeypatch):
-    engine, alerts = _setup(monkeypatch)
-
-    main.create_event(_request(), name="Spring Ride", route_key="faribault_mankato")
-    with Session(engine) as s:
-        token = s.exec(select(Event)).one().organizer_token
-    main.request_recovery_email(_request(), token=token, email="Me@X.com")
-    with Session(engine) as s:
-        verify_token = s.exec(select(Event)).one().email_verify_token
-
-    alerts.clear()  # drop the creation alert; we only care about confirmation here
-    main.confirm_recovery_email(_request(), verify_token=verify_token)
-
-    assert len(alerts) == 1
-    assert alerts[0]["kind"] == "email_confirmed"
-    assert "Spring Ride" in alerts[0]["subject"]
-    assert "me@x.com" in alerts[0]["body"]  # the confirmed address, normalized
-
-
-def test_bad_confirm_token_does_not_alert(monkeypatch):
+def test_confirm_click_does_not_alert(monkeypatch):
+    # Confirming a recovery email sends nothing through SMTP — it just promotes a
+    # pending address — so it's not an event the volume monitor should announce.
     engine, alerts = _setup(monkeypatch)
     main.create_event(_request(), name="Ride", route_key="faribault_mankato")
     with Session(engine) as s:
         token = s.exec(select(Event)).one().organizer_token
     main.request_recovery_email(_request(), token=token, email="me@x.com")
+    with Session(engine) as s:
+        verify_token = s.exec(select(Event)).one().email_verify_token
 
     alerts.clear()
-    main.confirm_recovery_email(_request(), verify_token="not-a-real-token")
-
-    assert alerts == []  # nothing was confirmed, so nothing to announce
+    main.confirm_recovery_email(_request(), verify_token=verify_token)
+    assert alerts == []
 
 
 # --------------------------------------------------------------------------- #
-# mailer.send_alert itself: gated on config, and exempt from the per-recipient cap
+# mailer.send: every outbound message also pings the operator
 # --------------------------------------------------------------------------- #
 
 
@@ -111,6 +99,50 @@ def _mail_setup(monkeypatch, *, alert_to="ops@ruyfo.example"):
     delivered: list[EmailMessage] = []
     monkeypatch.setattr(mailer, "_deliver", lambda msg: delivered.append(msg) or True)
     return delivered
+
+
+def test_send_pings_operator_with_recipient_and_kind(monkeypatch):
+    delivered = _mail_setup(monkeypatch)
+
+    assert mailer.send("user@x.com", "Confirm your email", "link", kind="verify") is True
+
+    tos = [m["To"] for m in delivered]
+    assert tos.count("user@x.com") == 1
+    assert tos.count("ops@ruyfo.example") == 1  # exactly one alert — no self-loop
+    alert = next(m for m in delivered if m["To"] == "ops@ruyfo.example")
+    assert "verify" in alert["Subject"]
+    assert "user@x.com" in alert.get_content()
+
+
+def test_send_without_alert_address_sends_only_user_mail(monkeypatch):
+    delivered = _mail_setup(monkeypatch, alert_to="")
+
+    assert mailer.send("user@x.com", "Hi", "body", kind="verify") is True
+    assert [m["To"] for m in delivered] == ["user@x.com"]
+
+
+def test_send_alert_reports_real_volume_excluding_alerts(monkeypatch):
+    delivered = _mail_setup(monkeypatch)
+
+    mailer.send("a@x.com", "s", "b", kind="verify")
+    mailer.send("b@x.com", "s", "b", kind="recovery")
+
+    # the second send's alert sees two real emails — its own alert mail (and the
+    # first send's alert) are excluded from the count
+    last_alert = [m for m in delivered if m["To"] == "ops@ruyfo.example"][-1]
+    assert "last 24h: 2" in last_alert.get_content()
+
+
+def test_alert_mail_does_not_count_against_real_volume(monkeypatch):
+    _mail_setup(monkeypatch)
+    mailer.send("a@x.com", "s", "b", kind="verify")  # 1 real + 1 alert recorded
+    assert mailcap.sent_last_24h() == 2
+    assert mailcap.sent_last_24h(exclude_kind="alert") == 1
+
+
+# --------------------------------------------------------------------------- #
+# send_alert itself: gated on config, exempt from the per-recipient cap
+# --------------------------------------------------------------------------- #
 
 
 def test_send_alert_noop_without_alert_address(monkeypatch):
@@ -131,16 +163,17 @@ def test_send_alert_delivers_to_operator(monkeypatch):
 
 def test_send_alert_skips_per_recipient_cap(monkeypatch):
     delivered = _mail_setup(monkeypatch)
-    # Drive the per-recipient cap (default 5) well past its limit.
+    # Drive past the per-recipient cap (default 5); alerts to the fixed operator
+    # address must not be throttled by the anti-mailbomb rule.
     for _ in range(8):
-        assert mailer.send_alert("New event", "body") is True
+        assert mailer.send_alert("ping", "body") is True
     assert len(delivered) == 8
 
 
 def test_send_alert_still_honors_global_cap(monkeypatch):
     delivered = _mail_setup(monkeypatch)
     monkeypatch.setenv("RUYFO_EMAIL_DAILY_CAP", "3")
-    results = [mailer.send_alert("New event", "body") for _ in range(5)]
+    results = [mailer.send_alert("ping", "body") for _ in range(5)]
     assert results == [True, True, True, False, False]
     assert len(delivered) == 3
 

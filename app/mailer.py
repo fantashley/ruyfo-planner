@@ -121,7 +121,30 @@ def send(to: str, subject: str, body: str, kind: str = "") -> bool:
     if not _deliver(_build(to, subject, body)):
         return False
     mailcap.record(to, kind)
+    if alerts_enabled():
+        _alert_sent(to, kind)
     return True
+
+
+def _alert_sent(to: str, kind: str) -> None:
+    """Operator heads-up that an email just went out — SMTP-volume monitoring.
+
+    Fired from :func:`send` for *every* successful outbound message (recovery
+    links, the recovery-email confirmation, …), so the operator can watch how
+    much mail the public forms are driving and spot abuse. The notification
+    itself goes via :func:`send_alert`, which never re-enters :func:`send`, so
+    this can't loop. The reported count excludes these operator alerts so it
+    reflects real outbound volume, not the monitoring traffic.
+    """
+    label = kind or "email"
+    count = mailcap.sent_last_24h(exclude_kind="alert")
+    send_alert(
+        f"RUYFO email sent: {label} (#{count} in 24h)",
+        "An email just went out through the RUYFO SMTP setup.\n\n"
+        f"  To:    {to}\n"
+        f"  Kind:  {label}\n\n"
+        f"Outbound emails (excluding these alerts) in the last 24h: {count}.\n",
+    )
 
 
 def send_alert(subject: str, body: str, kind: str = "alert") -> bool:

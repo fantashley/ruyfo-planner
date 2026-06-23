@@ -106,18 +106,27 @@ hides itself. The knobs:
 | `RUYFO_EMAIL_FROM` | falls back to `RUYFO_SMTP_USER` | From address |
 | `RUYFO_EMAIL_DAILY_CAP` | `100` | Max emails sent in any rolling 24h window (anti-relay backstop) |
 | `RUYFO_EMAIL_RECIPIENT_DAILY_CAP` | `5` | Max emails to a single address in a rolling 24h window |
-| `RUYFO_ALERT_EMAIL` | — | Operator address to notify on each event creation and recovery-email confirmation. Empty disables alerts |
+| `RUYFO_ALERT_EMAIL` | — | Operator address notified whenever the app sends an email (and on each event creation), for SMTP-volume/abuse monitoring. Empty disables alerts |
 
 #### Operator alerts
 
-Set `RUYFO_ALERT_EMAIL` to get a plain-text heads-up whenever an event is
-created (no recovery email is attached at that point, by design) and again when
-a recovery email is later confirmed for one — the second alert is where the
-"which address" actually shows up. Alerts go to this fixed operator-owned
-address, so they skip the per-recipient cap (it would otherwise silently drop
-alerts after a handful of events in a day); the global `RUYFO_EMAIL_DAILY_CAP`
-still applies and each alert lands in the same `emailsend` audit table. Requires
-SMTP to be configured, like all other mail.
+Set `RUYFO_ALERT_EMAIL` to monitor how much mail the public forms drive through
+your SMTP setup — the signal for catching abuse. You get a plain-text heads-up:
+
+- **whenever an outbound email is actually sent** — the recovery-email
+  confirmation *and* the recovery-links mail — naming the recipient, the kind,
+  and a running 24h count of real outbound emails; and
+- **whenever an event is created** (no recovery email is attached at that point,
+  by design — that's expected, not the abuse signal).
+
+Alerts go to this fixed operator-owned address, so they skip the per-recipient
+cap (it would otherwise silently drop alerts during exactly the spike you want
+to see). They're recorded under the `alert` kind in the `emailsend` audit table
+and are excluded from the "real outbound" count so the monitoring traffic
+doesn't inflate the number it reports. The global `RUYFO_EMAIL_DAILY_CAP` still
+bounds them as a runaway backstop; since each alert mirrors a real send, both
+share that budget — bump the cap if low-volume alerting ever bumps into it.
+Requires SMTP to be configured, like all other mail.
 
 The two caps are a backstop. The double opt-in above means the app only mails
 confirmed addresses (plus the one confirmation message per attach), so it can't

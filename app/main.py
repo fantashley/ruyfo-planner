@@ -995,24 +995,17 @@ def _event_alert_lines(ev: Event) -> str:
 
 
 def _alert_event_created(ev: Event) -> None:
-    """Notify the operator that a new event was created (no email yet by design)."""
+    """Notify the operator that a new event was created (no email yet by design).
+
+    Recorded as an ``"alert"`` (not a real outbound email) so it doesn't pad the
+    SMTP-volume count the per-send alerts report.
+    """
     mailer.send_alert(
         f"New RUYFO event: {ev.name}",
         "A new RUYFO event was just created.\n\n"
         + _event_alert_lines(ev)
-        + "\n(No recovery email is attached at creation; you'll get a follow-up "
-        "alert if one is later confirmed.)\n",
-        kind="event_created",
-    )
-
-
-def _alert_email_confirmed(ev: Event) -> None:
-    """Notify the operator that a recovery email was confirmed for an event."""
-    mailer.send_alert(
-        f"RUYFO recovery email confirmed: {ev.name}",
-        "A recovery email was just confirmed for a RUYFO event.\n\n"
-        + _event_alert_lines(ev),
-        kind="email_confirmed",
+        + "\n(No recovery email is attached at creation. If one is added later, "
+        "you'll get a per-send alert when its confirmation email goes out.)\n",
     )
 
 
@@ -1049,9 +1042,6 @@ def confirm_recovery_email(request: Request, verify_token: str):
             ev.email_verify_token = ""
             s.add(ev)
             s.commit()
-            s.refresh(ev)
-    if ok:
-        _alert_email_confirmed(ev)
     return templates.TemplateResponse(request, "email_confirmed.html", {"ok": ok})
 
 

@@ -60,11 +60,29 @@ def _recipient_daily_cap() -> int:
     return _int_env("RUYFO_EMAIL_RECIPIENT_DAILY_CAP", 5)
 
 
-def _count_since(s, cutoff: datetime, recipient: str | None = None) -> int:
+def _count_since(
+    s,
+    cutoff: datetime,
+    recipient: str | None = None,
+    exclude_kind: str | None = None,
+) -> int:
     stmt = select(func.count(EmailSend.id)).where(EmailSend.sent_at >= cutoff)
     if recipient is not None:
         stmt = stmt.where(EmailSend.recipient == recipient)
+    if exclude_kind is not None:
+        stmt = stmt.where(EmailSend.kind != exclude_kind)
     return s.exec(stmt).one()
+
+
+def sent_last_24h(exclude_kind: str | None = None) -> int:
+    """How many emails were sent in the rolling 24h window.
+
+    ``exclude_kind`` drops one tag from the tally — used to report real
+    outbound volume without counting the operator's own alert mail.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+    with get_session() as s:
+        return _count_since(s, cutoff, exclude_kind=exclude_kind)
 
 
 def allow(to: str, *, per_recipient: bool = True) -> bool:
