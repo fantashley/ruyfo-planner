@@ -1,8 +1,9 @@
-"""Google reCAPTCHA v2 verification for the unauthenticated forms.
+"""Google reCAPTCHA v2 verification for the event-creation form.
 
-The event-creation and link-recovery forms are open to the world, so a bot can
-drive them to create junk events and send mail to arbitrary addresses. A
-reCAPTCHA challenge on those two POSTs stops the automated submissions.
+The create-event form is open to the world, so a bot can drive it to spawn junk
+events. A reCAPTCHA challenge on that POST stops the automated submissions. (The
+link-recovery form isn't challenged — it only mails confirmed addresses, so it
+can't be used to spam strangers.)
 
 Config comes from the environment (see ~/dotfiles for the deploy plumbing). The
 site key is public (it ships in the HTML); the secret is private and supports a
