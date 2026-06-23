@@ -114,6 +114,16 @@
 })();
 </script>
 {% if recaptcha_enabled %}
-<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+<script>
+  // Render every .g-recaptcha explicitly. Automatic mode only renders the first
+  // widget it finds, which would leave the "Lost your link?" form without a
+  // challenge (and no g-recaptcha-response), so /recover would always fail.
+  window.onRecaptchaLoad = function () {
+    document.querySelectorAll(".g-recaptcha").forEach(function (el) {
+      grecaptcha.render(el, { sitekey: el.dataset.sitekey });
+    });
+  };
+</script>
+<script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
 {% endif %}
 {% endblock %}

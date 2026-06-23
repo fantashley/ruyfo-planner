@@ -141,6 +141,26 @@ def test_create_event_blocked_when_captcha_missing(monkeypatch):
         assert s.exec(select(Event)).all() == []  # nothing created
 
 
+def _render_index(**context) -> str:
+    base = {"email_enabled": True, "recovered": False, "error": None}
+    return main.templates.env.get_template("index.html").render({**base, **context})
+
+
+def test_index_renders_explicit_recaptcha_for_both_forms():
+    html = _render_index(recaptcha_enabled=True, recaptcha_site_key="site-key")
+    # one widget on the create form and one on the recovery form
+    assert html.count('class="g-recaptcha"') == 2
+    # explicit rendering, not Google's automatic mode (which renders only one)
+    assert "render=explicit" in html
+    assert "grecaptcha.render(" in html
+
+
+def test_index_omits_recaptcha_when_disabled():
+    html = _render_index(recaptcha_enabled=False, recaptcha_site_key="")
+    assert "g-recaptcha" not in html
+    assert "recaptcha/api.js" not in html
+
+
 def test_recover_blocked_when_captcha_missing(monkeypatch):
     _configure(monkeypatch)
     _in_memory_db(monkeypatch)
