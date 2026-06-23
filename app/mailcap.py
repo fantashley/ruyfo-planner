@@ -67,14 +67,20 @@ def _count_since(s, cutoff: datetime, recipient: str | None = None) -> int:
     return s.exec(stmt).one()
 
 
-def allow(to: str) -> bool:
-    """Whether sending one more email to ``to`` stays under both caps."""
+def allow(to: str, *, per_recipient: bool = True) -> bool:
+    """Whether sending one more email to ``to`` stays under the caps.
+
+    The global daily cap always applies. ``per_recipient=False`` skips the
+    per-address anti-mailbomb cap — used only for mail to a fixed operator
+    address (see :func:`app.mailer.send_alert`), never for visitor-supplied
+    recipients.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     with get_session() as s:
         if _count_since(s, cutoff) >= _daily_cap():
             log.warning("global daily email cap reached; suppressing email to %s", to)
             return False
-        if _count_since(s, cutoff, recipient=to) >= _recipient_daily_cap():
+        if per_recipient and _count_since(s, cutoff, recipient=to) >= _recipient_daily_cap():
             log.warning("per-recipient daily email cap reached for %s", to)
             return False
     return True

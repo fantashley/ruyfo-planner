@@ -941,6 +941,7 @@ def create_event(
         s.add(ev)
         s.commit()
         s.refresh(ev)
+    _alert_event_created(ev)
     return RedirectResponse(f"{_event_path(ev)}?created=1", status_code=303)
 
 
@@ -982,6 +983,39 @@ def request_recovery_email(request: Request, token: str, email: str = Form("")):
     return RedirectResponse(f"{_event_path(ev)}?email_pending=1", status_code=303)
 
 
+def _event_alert_lines(ev: Event) -> str:
+    """The shared Event/Route/Email block used in the operator alert emails."""
+    route = ROUTES.get(ev.route_key)
+    route_name = route.name if route else ev.route_key
+    return (
+        f"  Event:  {ev.name}\n"
+        f"  Route:  {route_name}\n"
+        f"  Email:  {ev.organizer_email or '(none)'}\n"
+    )
+
+
+def _alert_event_created(ev: Event) -> None:
+    """Notify the operator that a new event was created (no email yet by design)."""
+    mailer.send_alert(
+        f"New RUYFO event: {ev.name}",
+        "A new RUYFO event was just created.\n\n"
+        + _event_alert_lines(ev)
+        + "\n(No recovery email is attached at creation; you'll get a follow-up "
+        "alert if one is later confirmed.)\n",
+        kind="event_created",
+    )
+
+
+def _alert_email_confirmed(ev: Event) -> None:
+    """Notify the operator that a recovery email was confirmed for an event."""
+    mailer.send_alert(
+        f"RUYFO recovery email confirmed: {ev.name}",
+        "A recovery email was just confirmed for a RUYFO event.\n\n"
+        + _event_alert_lines(ev),
+        kind="email_confirmed",
+    )
+
+
 def _email_verification(request: Request, to: str, verify_token: str) -> None:
     """Send the (deliberately content-free) confirmation mail for a recovery email."""
     link = _external_url(request, f"/verify-email/{verify_token}")
@@ -1015,6 +1049,9 @@ def confirm_recovery_email(request: Request, verify_token: str):
             ev.email_verify_token = ""
             s.add(ev)
             s.commit()
+            s.refresh(ev)
+    if ok:
+        _alert_email_confirmed(ev)
     return templates.TemplateResponse(request, "email_confirmed.html", {"ok": ok})
 
 
