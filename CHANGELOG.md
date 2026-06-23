@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/fantashley/ruyfo-planner/compare/v0.3.0...v0.4.0) (2026-06-23)
+
+
+### Features
+
+* **security:** add reCAPTCHA to the event and recovery forms ([#21](https://github.com/fantashley/ruyfo-planner/issues/21)) ([dc2ddda](https://github.com/fantashley/ruyfo-planner/commit/dc2ddda80f575503bf6d2388eae7ede345bfb683))
+* **security:** verified, opt-in email recovery (no mail on create) ([#24](https://github.com/fantashley/ruyfo-planner/issues/24)) ([2454b57](https://github.com/fantashley/ruyfo-planner/commit/2454b576f1f6ea01ab4ff7d3abd3fd9a5311be59))
+
 ## [0.3.0](https://github.com/fantashley/ruyfo-planner/compare/v0.2.0...v0.3.0) (2026-06-22)
 
 
