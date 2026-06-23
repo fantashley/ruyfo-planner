@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-hero">
+  <div>
+    <p class="eyebrow">RUYFO logistics</p>
+    {% if ok %}
+    <h1>Email confirmed</h1>
+    <p class="muted">This address is now set up for link recovery. If you ever
+      lose your organizer link, use “Lost your link?” on the
+      <a href="/">home page</a> to have it emailed here.</p>
+    {% else %}
+    <h1>Link expired or already used</h1>
+    <p class="muted">That confirmation link isn’t valid anymore. Open your event
+      with your organizer link and request a new recovery email from there.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

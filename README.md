@@ -83,11 +83,18 @@ roster with the **Import data** button and pull the current roster back out with
 
 ### Email recovery (optional)
 
-If you supply an organizer email when creating an event, the app emails you the
-organizer link, and the home page's **Lost your link?** form will re-send the
-links for every event under that address. Email is off until SMTP is configured
-via the environment (defaults target Fastmail); without it the app and tests run
-fine and the recovery UI hides itself. The knobs:
+Creating an event sends **no email** — the organizer link is shown on the next
+page (save it). To enable email recovery, open your event and add a recovery
+address under **Recovery email**: the app sends that address a single, content-
+free confirmation link (no event name, no organizer link), and only once you
+follow it does the address go on file. The home page's **Lost your link?** form
+then re-sends the links for every event under a *confirmed* address.
+
+This double opt-in is deliberate: the only address the app ever mails is one
+someone proved they control, so the open forms can't be used to spam arbitrary
+people. Email is off until SMTP is configured via the environment (defaults
+target Fastmail); without it the app and tests run fine and the recovery UI
+hides itself. The knobs:
 
 | Var | Default | What |
 |-----|---------|------|
@@ -100,11 +107,11 @@ fine and the recovery UI hides itself. The knobs:
 | `RUYFO_EMAIL_DAILY_CAP` | `100` | Max emails sent in any rolling 24h window (anti-relay backstop) |
 | `RUYFO_EMAIL_RECIPIENT_DAILY_CAP` | `5` | Max emails to a single address in a rolling 24h window |
 
-The two caps are an origin-side safety net: because the event-creation and
-"Lost your link?" forms are unauthenticated, a bot can ask the app to mail an
-arbitrary address. The caps bound how much mail can leave (globally and per
-recipient) if anything slips past the edge defenses. They live at the single
-`app/mailer.send` chokepoint and are backed by a small `emailsend` audit table.
+The two caps are a backstop. The double opt-in above means the app only mails
+confirmed addresses (plus the one confirmation message per attach), so it can't
+be turned into a spam relay — but the caps still bound total volume if a bot
+ever drives the confirmation path. They live at the single `app/mailer.send`
+chokepoint and are backed by a small `emailsend` audit table.
 
 ### Locking the app to a fronting CDN (optional)
 
