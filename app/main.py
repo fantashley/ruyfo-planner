@@ -18,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlmodel import delete, select
 
-from . import __version__, fixtures, geo, mailer
+from . import __version__, fixtures, geo, mailer, recaptcha
 from .db import get_session, init_db
 from .events import ROUTES, Route, get_route
 from .models import Event, Participant, to_person
@@ -873,22 +873,37 @@ def _event_page_context(
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, recovered: int | None = None):
+def index(request: Request, recovered: int | None = None, error: str | None = None):
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"email_enabled": mailer.is_configured(), "recovered": bool(recovered)},
+        {
+            "email_enabled": mailer.is_configured(),
+            "recovered": bool(recovered),
+            "error": error,
+            "recaptcha_enabled": recaptcha.is_configured(),
+            "recaptcha_site_key": recaptcha.site_key(),
+        },
     )
 
 
 @app.post("/recover")
-def recover_links(request: Request, email: str = Form("")):
+def recover_links(
+    request: Request,
+    email: str = Form(""),
+    recaptcha_token: str = Form("", alias="g-recaptcha-response"),
+):
     """Email a creator the organizer links for every event under their address.
 
     Always redirects to the same neutral confirmation regardless of whether the
     address matched anything — otherwise this open form would leak which emails
     have created events.
     """
+    if not recaptcha.verify(recaptcha_token):
+        return RedirectResponse(
+            f"/?error={quote('Please complete the CAPTCHA and try again.')}",
+            status_code=303,
+        )
     normalized = _normalize_email(email)
     if normalized and mailer.is_configured():
         with get_session() as s:
@@ -917,7 +932,13 @@ def create_event(
     name: str = Form(...),
     route_key: str = Form(...),
     organizer_email: str = Form(""),
+    recaptcha_token: str = Form("", alias="g-recaptcha-response"),
 ):
+    if not recaptcha.verify(recaptcha_token):
+        return RedirectResponse(
+            f"/?error={quote('Please complete the CAPTCHA and try again.')}",
+            status_code=303,
+        )
     email = _normalize_email(organizer_email)
     with get_session() as s:
         # A SAG wagon isn't declared up front anymore — the event gains one
