@@ -24,9 +24,15 @@ class Event(SQLModel, table=True):
     organizer_token: str = Field(default_factory=new_access_token, index=True)
     participant_token: str = Field(default_factory=new_access_token, index=True)
     readonly_token: str = Field(default_factory=new_access_token, index=True)
-    # Optional: lets the creator recover their organizer link by email. Stored
-    # normalized (lowercased/stripped); "" means they declined to give one.
+    # Recovery email — only ever holds a *confirmed* address (double opt-in), so
+    # /recover only mails addresses someone proved they control. "" = none yet.
+    # Stored normalized (lowercased/stripped). Never set directly at create time.
     organizer_email: str = Field(default="", index=True)
+    # An address that's been submitted but not yet confirmed via the emailed
+    # link. It is promoted to organizer_email only when the token below is hit.
+    pending_email: str = Field(default="")
+    # One-time token for the confirmation link; "" when nothing is pending.
+    email_verify_token: str = Field(default="", index=True)
     # Set in Python at insert time (SQLite can't default a column to
     # CURRENT_TIMESTAMP via ALTER TABLE). NULL on events that predate this
     # column, whose real creation date is unknown.

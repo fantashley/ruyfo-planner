@@ -21,7 +21,7 @@ from sqlmodel import delete, select
 from . import __version__, fixtures, geo, mailer, recaptcha
 from .db import get_session, init_db
 from .events import ROUTES, Route, get_route
-from .models import Event, Participant, to_person
+from .models import Event, Participant, new_access_token, to_person
 from .solver import Problem, ReturnOption, TRANSITION_LABELS, solve
 
 BASE = Path(__file__).parent
@@ -931,7 +931,6 @@ def create_event(
     request: Request,
     name: str = Form(...),
     route_key: str = Form(...),
-    organizer_email: str = Form(""),
     recaptcha_token: str = Form("", alias="g-recaptcha-response"),
 ):
     if not recaptcha.verify(recaptcha_token):
@@ -939,37 +938,91 @@ def create_event(
             f"/?error={quote('Please complete the CAPTCHA and try again.')}",
             status_code=303,
         )
-    email = _normalize_email(organizer_email)
+    # Creation sends no email — the organizer link is shown on the next page.
+    # A recovery email can be attached later from the event page, and only
+    # after it's confirmed (see request_recovery_email / confirm_recovery_email).
     with get_session() as s:
         # A SAG wagon isn't declared up front anymore — the event gains one
         # once a participant checks "I'll drive the SAG wagon".
-        ev = Event(name=name, route_key=route_key, has_sag=False, organizer_email=email)
+        ev = Event(name=name, route_key=route_key, has_sag=False)
         s.add(ev)
         s.commit()
         s.refresh(ev)
-    if email:
-        _email_organizer_link(request, ev, email)
     return RedirectResponse(f"{_event_path(ev)}?created=1", status_code=303)
 
 
-def _email_organizer_link(request: Request, ev: Event, to: str) -> None:
-    """Email the organizer link for a single freshly created event."""
-    link = _share_url(request, ev, "organizer")
+@app.post("/e/{token}/email")
+def request_recovery_email(request: Request, token: str, email: str = Form("")):
+    """Attach a recovery email to an event and send it a confirmation link.
+
+    Organizer-only (holding the token proves control of the event). The address
+    is stored as *pending* and a benign confirmation mail — no event name, no
+    organizer link — is sent; it becomes the recovery address only once the
+    link is followed. This is the one place the app mails a user-supplied
+    address, gated behind the organizer token + reCAPTCHA-at-create + the
+    per-recipient/global send caps.
+    """
+    access = _resolve_event_access(token)
+    if access is None:
+        return RedirectResponse("/", status_code=303)
+    if access.role != "organizer":
+        return RedirectResponse(_event_path(access.event, role=access.role), status_code=303)
+    ev = access.event
+
+    normalized = _normalize_email(email)
+    if not normalized:
+        return RedirectResponse(
+            f"{_event_path(ev)}?error={quote('Enter a valid email address.')}",
+            status_code=303,
+        )
+    if not mailer.is_configured():
+        return RedirectResponse(_event_path(ev), status_code=303)
+
+    verify_token = new_access_token()
+    with get_session() as s:
+        e = s.get(Event, ev.id)
+        e.pending_email = normalized
+        e.email_verify_token = verify_token
+        s.add(e)
+        s.commit()
+    _email_verification(request, normalized, verify_token)
+    return RedirectResponse(f"{_event_path(ev)}?email_pending=1", status_code=303)
+
+
+def _email_verification(request: Request, to: str, verify_token: str) -> None:
+    """Send the (deliberately content-free) confirmation mail for a recovery email."""
+    link = _external_url(request, f"/verify-email/{verify_token}")
     mailer.send(
         to,
-        f"Your RUYFO organizer link for {ev.name}",
-        f"""You created the event "{ev.name}".
+        "Confirm your email for RUYFO link recovery",
+        f"""Someone added this address as the recovery email for a RUYFO event.
 
-This is your organizer link — keep it safe, it's how you get back in to
-manage the roster:
+Confirm it so your organizer link can be emailed here if you lose it:
 
   {link}
 
-Lost it later? Visit the planner home page and use "Lost your link?" to
-have all your event links emailed again.
+If you weren't expecting this, just ignore this message — nothing is shared
+with you and no link is sent unless you confirm.
 """,
-        kind="organizer_link",
+        kind="verify",
     )
+
+
+@app.get("/verify-email/{verify_token}", response_class=HTMLResponse)
+def confirm_recovery_email(request: Request, verify_token: str):
+    """Promote a pending recovery email to confirmed when its link is followed."""
+    with get_session() as s:
+        ev = s.exec(
+            select(Event).where(Event.email_verify_token == verify_token)
+        ).first()
+        ok = ev is not None
+        if ok:
+            ev.organizer_email = ev.pending_email
+            ev.pending_email = ""
+            ev.email_verify_token = ""
+            s.add(ev)
+            s.commit()
+    return templates.TemplateResponse(request, "email_confirmed.html", {"ok": ok})
 
 
 @app.get("/events/{event_id}", response_class=HTMLResponse)
@@ -984,6 +1037,7 @@ def event_token_page(
     error: str | None = None,
     edit: int | None = None,
     created: int | None = None,
+    email_pending: int | None = None,
 ):
     access = _resolve_event_access(token)
     if access is None:
@@ -993,10 +1047,11 @@ def event_token_page(
     if edit is not None and access.role in ("organizer", "participant"):
         editing = next((p for p in people if p.id == edit), None)
     context = _event_page_context(request, access, people, error, editing)
-    # When a creator first lands here, nudge them to save the link (and, if they
-    # gave an email, tell them it's also on its way).
+    # When a creator first lands here, nudge them to save the link — there's no
+    # email copy unless they later add and confirm a recovery address.
     context["just_created"] = bool(created) and access.role == "organizer"
-    context["emailed_link"] = bool(access.event.organizer_email) and mailer.is_configured()
+    context["email_enabled"] = mailer.is_configured()
+    context["email_pending_flash"] = bool(email_pending)
     return templates.TemplateResponse(request, "event.html", context)
 
 

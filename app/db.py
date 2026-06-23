@@ -18,6 +18,8 @@ _SQLITE_SCHEMA_ADDITIONS = {
         "participant_token": "VARCHAR NOT NULL DEFAULT ''",
         "readonly_token": "VARCHAR NOT NULL DEFAULT ''",
         "organizer_email": "VARCHAR NOT NULL DEFAULT ''",
+        "pending_email": "VARCHAR NOT NULL DEFAULT ''",
+        "email_verify_token": "VARCHAR NOT NULL DEFAULT ''",
         # Nullable: SQLite rejects a CURRENT_TIMESTAMP default on ADD COLUMN,
         # and pre-existing rows have no known creation date.
         "created_at": "TIMESTAMP",

@@ -27,15 +27,40 @@
 <div class="card save-link-notice">
   <h2>Save this link!</h2>
   <p class="muted">
-    This organizer link is the only way back in to manage your event.
-    Bookmark it{% if emailed_link %} — we've also emailed a copy to you{% endif %}.
-    {% if not emailed_link %}There's no account and no password, so if you lose
-    it the event can't be recovered.{% endif %}
+    This organizer link is the only way back in to manage your event. Bookmark
+    it. There's no account and no password{% if email_enabled %}, but you can add
+    a recovery email below to have it sent to you if you lose it{% else %}, so if
+    you lose it the event can't be recovered{% endif %}.
   </p>
   <span class="share-row">
     <input readonly value="{{ share_url(role='organizer') }}">
     <button type="button" class="copy-link">Copy</button>
   </span>
+</div>
+{% endif %}
+
+{% if can_manage_event and email_enabled %}
+<div class="card recovery-email-card">
+  <div class="section-head compact"><h2>Recovery email</h2></div>
+  {% if email_pending_flash %}
+  <p class="muted">Check that inbox for a confirmation link — the address isn't
+    active for recovery until you click it.</p>
+  {% endif %}
+  {% if event.organizer_email %}
+  <p>Confirmed: <strong>{{ event.organizer_email }}</strong>. If you lose your
+    link, use “Lost your link?” on the home page to have it emailed here.</p>
+  {% elif event.pending_email %}
+  <p class="muted">Pending confirmation: <strong>{{ event.pending_email }}</strong>.
+    Click the link in that email to finish. Re-enter below to resend.</p>
+  {% endif %}
+  <form method="post" action="{{ event_url('/email') }}" class="recover-form">
+    <label>{{ "Change recovery email" if event.organizer_email else "Add a recovery email" }}
+      <input name="email" type="email" placeholder="you@example.com" required>
+    </label>
+    <small class="muted">We send one confirmation email to that address and
+      nothing else until you confirm it — no link is shared in that message.</small>
+    <button type="submit">Send confirmation</button>
+  </form>
 </div>
 {% endif %}
 

@@ -36,14 +36,6 @@
       <input name="name" placeholder="e.g. Fall RUYFO 2026" required>
     </label>
 
-    {% if email_enabled %}
-    <label>Your email <span class="muted">(optional)</span>
-      <input name="organizer_email" type="email" placeholder="so you can recover your link later">
-      <small class="muted">We'll email you the organizer link. Skip it and the
-        link on the next page is the <em>only</em> way back to your event.</small>
-    </label>
-    {% endif %}
-
     <fieldset class="route-picker">
       <legend>Route</legend>
       {% for key, r in ROUTES.items() %}

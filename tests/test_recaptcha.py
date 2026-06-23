@@ -132,7 +132,7 @@ def test_create_event_blocked_when_captcha_missing(monkeypatch):
 
     resp = main.create_event(
         _request(), name="Bot Event", route_key="faribault_mankato",
-        organizer_email="", recaptcha_token="",
+        recaptcha_token="",
     )
 
     assert resp.status_code == 303
