@@ -120,6 +120,21 @@ as the `X-Origin-Secret` header, and tell the app the same value:
 | `RUYFO_ORIGIN_SECRET` | — | Shared secret; requests without a matching `X-Origin-Secret` header get 403. Empty disables the check |
 | `RUYFO_ORIGIN_SECRET_FILE` | — | Path to read the secret from instead (for secret managers) |
 
+### CAPTCHA on the public forms (optional)
+
+The event-creation and "Lost your link?" forms are unauthenticated, so they
+carry a Google reCAPTCHA v2 challenge when configured. With both keys set, the
+widget renders on those forms and the server rejects a submission whose token
+fails verification (it fails *closed* — a missing token or an unreachable Google
+is rejected). Unset ⇒ the gate is disabled and the widget is hidden, so dev and
+tests run without it.
+
+| Var | Default | What |
+|-----|---------|------|
+| `RUYFO_RECAPTCHA_SITE_KEY` | — | Public reCAPTCHA v2 site key (rendered in the form) |
+| `RUYFO_RECAPTCHA_SECRET` | — | Private reCAPTCHA secret (or use the `_FILE` form) |
+| `RUYFO_RECAPTCHA_SECRET_FILE` | — | Path to read the secret from instead (for secret managers) |
+
 ## Fixtures (fixed rosters for testing)
 
 Keep a real roster as JSON in `fixtures/` and re-check plans as the model changes

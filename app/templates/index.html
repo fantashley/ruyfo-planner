@@ -14,6 +14,10 @@
 </div>
 {% endif %}
 
+{% if error %}
+<section class="card error-card"><p class="error">{{ error }}</p></section>
+{% endif %}
+
 <section class="card recent-events" id="recent-events" hidden>
   <div class="section-head compact">
     <h2>Your recent events</h2>
@@ -58,6 +62,10 @@
       {% endfor %}
     </fieldset>
 
+    {% if recaptcha_enabled %}
+    <div class="g-recaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
+    {% endif %}
+
     <button class="primary-action" type="submit">Create event</button>
   </form>
 </section>
@@ -73,6 +81,10 @@
     <label>Your email
       <input name="email" type="email" placeholder="you@example.com" required>
     </label>
+    {% if recaptcha_enabled %}
+    <div class="g-recaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
+    {% endif %}
+
     <button type="submit">Email me my links</button>
   </form>
 </section>
@@ -101,4 +113,7 @@
   } catch (err) { /* private mode / disabled storage — no-op */ }
 })();
 </script>
+{% if recaptcha_enabled %}
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+{% endif %}
 {% endblock %}
