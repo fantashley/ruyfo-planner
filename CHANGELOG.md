@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/fantashley/ruyfo-planner/compare/v0.4.0...v0.5.0) (2026-06-23)
+
+
+### Features
+
+* **security:** drop reCAPTCHA from the /recover form ([#25](https://github.com/fantashley/ruyfo-planner/issues/25)) ([9939ef6](https://github.com/fantashley/ruyfo-planner/commit/9939ef6e2db62f96a82d98d4516654ec7a3177e8))
+
 ## [0.4.0](https://github.com/fantashley/ruyfo-planner/compare/v0.3.0...v0.4.0) (2026-06-23)
 
 
