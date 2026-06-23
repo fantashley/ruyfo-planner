@@ -127,14 +127,15 @@ as the `X-Origin-Secret` header, and tell the app the same value:
 | `RUYFO_ORIGIN_SECRET` | — | Shared secret; requests without a matching `X-Origin-Secret` header get 403. Empty disables the check |
 | `RUYFO_ORIGIN_SECRET_FILE` | — | Path to read the secret from instead (for secret managers) |
 
-### CAPTCHA on the public forms (optional)
+### CAPTCHA on the create form (optional)
 
-The event-creation and "Lost your link?" forms are unauthenticated, so they
-carry a Google reCAPTCHA v2 challenge when configured. With both keys set, the
-widget renders on those forms and the server rejects a submission whose token
+The event-creation form is unauthenticated and the main bot entry point, so it
+carries a Google reCAPTCHA v2 challenge when configured. With both keys set, the
+widget renders on that form and the server rejects a submission whose token
 fails verification (it fails *closed* — a missing token or an unreachable Google
 is rejected). Unset ⇒ the gate is disabled and the widget is hidden, so dev and
-tests run without it.
+tests run without it. (The "Lost your link?" form isn't challenged — it only
+mails *confirmed* addresses, so it can't be used to spam strangers.)
 
 | Var | Default | What |
 |-----|---------|------|

@@ -146,11 +146,12 @@ def _render_index(**context) -> str:
     return main.templates.env.get_template("index.html").render({**base, **context})
 
 
-def test_index_renders_explicit_recaptcha_for_both_forms():
+def test_index_renders_explicit_recaptcha_on_create_form():
     html = _render_index(recaptcha_enabled=True, recaptcha_site_key="site-key")
-    # one widget on the create form and one on the recovery form
-    assert html.count('class="g-recaptcha"') == 2
-    # explicit rendering, not Google's automatic mode (which renders only one)
+    # only the create form is challenged; /recover is not (it mails confirmed
+    # addresses only, so it can't be used to spam strangers)
+    assert html.count('class="g-recaptcha"') == 1
+    # explicit rendering, not Google's automatic mode
     assert "render=explicit" in html
     assert "grecaptcha.render(" in html
 
@@ -161,19 +162,15 @@ def test_index_omits_recaptcha_when_disabled():
     assert "recaptcha/api.js" not in html
 
 
-def test_recover_blocked_when_captcha_missing(monkeypatch):
+def test_recover_is_not_captcha_gated(monkeypatch):
+    # /recover only mails confirmed addresses, so it carries no CAPTCHA — even
+    # with reCAPTCHA configured, a recovery request is processed (neutral 303).
     _configure(monkeypatch)
     _in_memory_db(monkeypatch)
-
-    sent: list = []
     monkeypatch.setattr(main.mailer, "is_configured", lambda: True)
-    monkeypatch.setattr(
-        main.mailer, "send",
-        lambda *a, **k: sent.append(a) or True,
-    )
+    monkeypatch.setattr(main.mailer, "send", lambda *a, **k: True)
 
-    resp = main.recover_links(_request(), email="me@x.com", recaptcha_token="")
+    resp = main.recover_links(_request(), email="me@x.com")
 
     assert resp.status_code == 303
-    assert resp.headers["location"].startswith("/?error=")
-    assert sent == []  # no mail attempted
+    assert resp.headers["location"] == "/?recovered=1"  # neutral, no error redirect

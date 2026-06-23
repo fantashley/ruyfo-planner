@@ -888,22 +888,15 @@ def index(request: Request, recovered: int | None = None, error: str | None = No
 
 
 @app.post("/recover")
-def recover_links(
-    request: Request,
-    email: str = Form(""),
-    recaptcha_token: str = Form("", alias="g-recaptcha-response"),
-):
+def recover_links(request: Request, email: str = Form("")):
     """Email a creator the organizer links for every event under their address.
 
-    Always redirects to the same neutral confirmation regardless of whether the
-    address matched anything — otherwise this open form would leak which emails
-    have created events.
+    No CAPTCHA here: this only mails *confirmed* recovery addresses, so it can't
+    be used to spam strangers, and hammering a known address is bounded by the
+    per-recipient send cap and the proxy rate limit. Always redirects to the same
+    neutral confirmation regardless of whether the address matched anything —
+    otherwise this open form would leak which emails have created events.
     """
-    if not recaptcha.verify(recaptcha_token):
-        return RedirectResponse(
-            f"/?error={quote('Please complete the CAPTCHA and try again.')}",
-            status_code=303,
-        )
     normalized = _normalize_email(email)
     if normalized and mailer.is_configured():
         with get_session() as s:
