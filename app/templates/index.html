@@ -73,10 +73,6 @@
     <label>Your email
       <input name="email" type="email" placeholder="you@example.com" required>
     </label>
-    {% if recaptcha_enabled %}
-    <div class="g-recaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
-    {% endif %}
-
     <button type="submit">Email me my links</button>
   </form>
 </section>
@@ -107,9 +103,8 @@
 </script>
 {% if recaptcha_enabled %}
 <script>
-  // Render every .g-recaptcha explicitly. Automatic mode only renders the first
-  // widget it finds, which would leave the "Lost your link?" form without a
-  // challenge (and no g-recaptcha-response), so /recover would always fail.
+  // Render every .g-recaptcha explicitly (robust if more than one widget is
+  // ever on the page; automatic mode only renders the first).
   window.onRecaptchaLoad = function () {
     document.querySelectorAll(".g-recaptcha").forEach(function (el) {
       grecaptcha.render(el, { sitekey: el.dataset.sitekey });
