@@ -941,6 +941,7 @@ def create_event(
         s.add(ev)
         s.commit()
         s.refresh(ev)
+    _alert_event_created(ev)
     return RedirectResponse(f"{_event_path(ev)}?created=1", status_code=303)
 
 
@@ -980,6 +981,32 @@ def request_recovery_email(request: Request, token: str, email: str = Form("")):
         s.commit()
     _email_verification(request, normalized, verify_token)
     return RedirectResponse(f"{_event_path(ev)}?email_pending=1", status_code=303)
+
+
+def _event_alert_lines(ev: Event) -> str:
+    """The shared Event/Route/Email block used in the operator alert emails."""
+    route = ROUTES.get(ev.route_key)
+    route_name = route.name if route else ev.route_key
+    return (
+        f"  Event:  {ev.name}\n"
+        f"  Route:  {route_name}\n"
+        f"  Email:  {ev.organizer_email or '(none)'}\n"
+    )
+
+
+def _alert_event_created(ev: Event) -> None:
+    """Notify the operator that a new event was created (no email yet by design).
+
+    Recorded as an ``"alert"`` (not a real outbound email) so it doesn't pad the
+    SMTP-volume count the per-send alerts report.
+    """
+    mailer.send_alert(
+        f"New RUYFO event: {ev.name}",
+        "A new RUYFO event was just created.\n\n"
+        + _event_alert_lines(ev)
+        + "\n(No recovery email is attached at creation. If one is added later, "
+        "you'll get a per-send alert when its confirmation email goes out.)\n",
+    )
 
 
 def _email_verification(request: Request, to: str, verify_token: str) -> None:

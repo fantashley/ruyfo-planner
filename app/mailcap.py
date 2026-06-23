@@ -60,21 +60,45 @@ def _recipient_daily_cap() -> int:
     return _int_env("RUYFO_EMAIL_RECIPIENT_DAILY_CAP", 5)
 
 
-def _count_since(s, cutoff: datetime, recipient: str | None = None) -> int:
+def _count_since(
+    s,
+    cutoff: datetime,
+    recipient: str | None = None,
+    exclude_kind: str | None = None,
+) -> int:
     stmt = select(func.count(EmailSend.id)).where(EmailSend.sent_at >= cutoff)
     if recipient is not None:
         stmt = stmt.where(EmailSend.recipient == recipient)
+    if exclude_kind is not None:
+        stmt = stmt.where(EmailSend.kind != exclude_kind)
     return s.exec(stmt).one()
 
 
-def allow(to: str) -> bool:
-    """Whether sending one more email to ``to`` stays under both caps."""
+def sent_last_24h(exclude_kind: str | None = None) -> int:
+    """How many emails were sent in the rolling 24h window.
+
+    ``exclude_kind`` drops one tag from the tally — used to report real
+    outbound volume without counting the operator's own alert mail.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+    with get_session() as s:
+        return _count_since(s, cutoff, exclude_kind=exclude_kind)
+
+
+def allow(to: str, *, per_recipient: bool = True) -> bool:
+    """Whether sending one more email to ``to`` stays under the caps.
+
+    The global daily cap always applies. ``per_recipient=False`` skips the
+    per-address anti-mailbomb cap — used only for mail to a fixed operator
+    address (see :func:`app.mailer.send_alert`), never for visitor-supplied
+    recipients.
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     with get_session() as s:
         if _count_since(s, cutoff) >= _daily_cap():
             log.warning("global daily email cap reached; suppressing email to %s", to)
             return False
-        if _count_since(s, cutoff, recipient=to) >= _recipient_daily_cap():
+        if per_recipient and _count_since(s, cutoff, recipient=to) >= _recipient_daily_cap():
             log.warning("per-recipient daily email cap reached for %s", to)
             return False
     return True

@@ -53,34 +53,31 @@ def _from() -> str:
     return os.environ.get("RUYFO_EMAIL_FROM", "").strip() or _user()
 
 
+def _alert_to() -> str:
+    """Operator address that gets notified of noteworthy events (creations, …).
+
+    Empty disables operator alerts entirely — the app and tests run fine without
+    it, just like an unconfigured SMTP setup.
+    """
+    return os.environ.get("RUYFO_ALERT_EMAIL", "").strip()
+
+
 def is_configured() -> bool:
     """Whether enough SMTP config is present to actually send mail."""
     return bool(_user() and _password() and _from())
 
 
-def send(to: str, subject: str, body: str, kind: str = "") -> bool:
-    """Send a plain-text email. Returns True if it went out.
+def alerts_enabled() -> bool:
+    """Whether operator alerts can go out (SMTP configured + an alert address)."""
+    return bool(is_configured() and _alert_to())
 
-    Never raises into the request path: a misconfigured or flaky SMTP server
-    logs a warning and returns False rather than 500-ing the page.
 
-    Subject to the outbound rate caps in :mod:`app.mailcap`: a send that would
-    exceed the global or per-recipient 24h cap is suppressed (returns False)
-    rather than relayed. ``kind`` is a free-form tag stored in the audit trail.
+def _deliver(msg: EmailMessage) -> bool:
+    """Hand a built message to SMTP. Returns True if it went out.
+
+    Never raises: a misconfigured or flaky server logs a warning and returns
+    False rather than 500-ing the request path that triggered the send.
     """
-    if not is_configured():
-        log.info("SMTP not configured; skipping email to %s", to)
-        return False
-
-    if not mailcap.allow(to):
-        return False
-
-    msg = EmailMessage()
-    msg["From"] = _from()
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
-
     host, port = _host(), _port()
     try:
         if port == 465:
@@ -93,7 +90,93 @@ def send(to: str, subject: str, body: str, kind: str = "") -> bool:
                 smtp.login(_user(), _password())
                 smtp.send_message(msg)
     except (OSError, smtplib.SMTPException) as exc:
-        log.warning("failed to send email to %s: %s", to, exc)
+        log.warning("failed to send email to %s: %s", msg["To"], exc)
+        return False
+    return True
+
+
+def _header_safe(value: str) -> str:
+    """Collapse CR/LF so a value can't 500 (or inject) when set as a header.
+
+    ``EmailMessage`` rejects header values containing ``\\r`` or ``\\n``, and the
+    recipient and subject can carry user-controlled text (an event name, a typed
+    recovery address). A newline must never reach a header: it would break the
+    "never raise into the request path" contract — :func:`_build` runs before
+    :func:`_deliver`'s exception handling — and could smuggle in extra headers.
+    """
+    return " ".join(value.splitlines()).strip()
+
+
+def _build(to: str, subject: str, body: str) -> EmailMessage:
+    msg = EmailMessage()
+    msg["From"] = _from()
+    msg["To"] = _header_safe(to)
+    msg["Subject"] = _header_safe(subject)
+    msg.set_content(body)
+    return msg
+
+
+def send(to: str, subject: str, body: str, kind: str = "") -> bool:
+    """Send a plain-text email to a (possibly user-supplied) address.
+
+    Subject to the outbound rate caps in :mod:`app.mailcap`: a send that would
+    exceed the global or per-recipient 24h cap is suppressed (returns False)
+    rather than relayed. ``kind`` is a free-form tag stored in the audit trail.
+    """
+    if not is_configured():
+        log.info("SMTP not configured; skipping email to %s", to)
+        return False
+
+    if not mailcap.allow(to):
+        return False
+
+    if not _deliver(_build(to, subject, body)):
+        return False
+    mailcap.record(to, kind)
+    if alerts_enabled():
+        _alert_sent(to, kind)
+    return True
+
+
+def _alert_sent(to: str, kind: str) -> None:
+    """Operator heads-up that an email just went out — SMTP-volume monitoring.
+
+    Fired from :func:`send` for *every* successful outbound message (recovery
+    links, the recovery-email confirmation, …), so the operator can watch how
+    much mail the public forms are driving and spot abuse. The notification
+    itself goes via :func:`send_alert`, which never re-enters :func:`send`, so
+    this can't loop. The reported count excludes these operator alerts so it
+    reflects real outbound volume, not the monitoring traffic.
+    """
+    label = kind or "email"
+    count = mailcap.sent_last_24h(exclude_kind="alert")
+    send_alert(
+        f"RUYFO email sent: {label} (#{count} in 24h)",
+        "An email just went out through the RUYFO SMTP setup.\n\n"
+        f"  To:    {to}\n"
+        f"  Kind:  {label}\n\n"
+        f"Outbound emails (excluding these alerts) in the last 24h: {count}.\n",
+    )
+
+
+def send_alert(subject: str, body: str, kind: str = "alert") -> bool:
+    """Notify the operator (``RUYFO_ALERT_EMAIL``) of a noteworthy event.
+
+    Unlike :func:`send`, the recipient is a fixed operator-owned address rather
+    than anything a visitor supplies, so the per-recipient anti-mailbomb cap
+    doesn't apply (and would otherwise silently drop alerts once a handful of
+    events were created in a day). The global daily cap still applies as a
+    runaway-volume backstop, and every alert is recorded in the audit trail.
+    """
+    to = _alert_to()
+    if not (is_configured() and to):
+        log.info("operator alerts not configured; skipping alert %r", subject)
+        return False
+
+    if not mailcap.allow(to, per_recipient=False):
+        return False
+
+    if not _deliver(_build(to, subject, body)):
         return False
     mailcap.record(to, kind)
     return True
