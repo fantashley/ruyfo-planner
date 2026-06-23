@@ -66,6 +66,30 @@ def test_create_event_alerts_operator_with_no_email_yet(monkeypatch):
     assert "(none)" in body  # no recovery email at creation by design
 
 
+def test_create_event_with_newline_name_does_not_break_request(monkeypatch):
+    # A direct POST can put a newline in the event name. With alerts enabled the
+    # name flows into the alert Subject; EmailMessage rejects CR/LF in a header,
+    # so without sanitizing this would 500 *after* the event is committed.
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr("app.db.engine", engine)
+    monkeypatch.setattr(mailer, "is_configured", lambda: True)
+    monkeypatch.setattr(mailer, "_alert_to", lambda: "ops@ruyfo.example")
+    delivered: list[EmailMessage] = []
+    monkeypatch.setattr(mailer, "_deliver", lambda msg: delivered.append(msg) or True)
+
+    resp = main.create_event(
+        _request(), name="Evil\r\nBcc: sneak@x.com", route_key="faribault_mankato"
+    )
+
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/e/")  # organizer link still returned
+    assert len(delivered) == 1
+    subject = delivered[0]["Subject"]
+    assert "\r" not in subject and "\n" not in subject
+    assert delivered[0]["Bcc"] is None  # newline folded into text, not a new header
+
+
 def test_confirm_click_does_not_alert(monkeypatch):
     # Confirming a recovery email sends nothing through SMTP — it just promotes a
     # pending address — so it's not an event the volume monitor should announce.
@@ -112,6 +136,17 @@ def test_send_pings_operator_with_recipient_and_kind(monkeypatch):
     alert = next(m for m in delivered if m["To"] == "ops@ruyfo.example")
     assert "verify" in alert["Subject"]
     assert "user@x.com" in alert.get_content()
+
+
+def test_build_strips_crlf_from_headers(monkeypatch):
+    delivered = _mail_setup(monkeypatch)
+    # newline in both the recipient and the subject must not raise or inject
+    assert (
+        mailer.send_alert("New event: Foo\r\nBcc: evil@x.com", "body") is True
+    )
+    subject = delivered[0]["Subject"]
+    assert subject == "New event: Foo Bcc: evil@x.com"
+    assert "\r" not in subject and "\n" not in subject
 
 
 def test_send_without_alert_address_sends_only_user_mail(monkeypatch):

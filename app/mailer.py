@@ -95,11 +95,23 @@ def _deliver(msg: EmailMessage) -> bool:
     return True
 
 
+def _header_safe(value: str) -> str:
+    """Collapse CR/LF so a value can't 500 (or inject) when set as a header.
+
+    ``EmailMessage`` rejects header values containing ``\\r`` or ``\\n``, and the
+    recipient and subject can carry user-controlled text (an event name, a typed
+    recovery address). A newline must never reach a header: it would break the
+    "never raise into the request path" contract — :func:`_build` runs before
+    :func:`_deliver`'s exception handling — and could smuggle in extra headers.
+    """
+    return " ".join(value.splitlines()).strip()
+
+
 def _build(to: str, subject: str, body: str) -> EmailMessage:
     msg = EmailMessage()
     msg["From"] = _from()
-    msg["To"] = to
-    msg["Subject"] = subject
+    msg["To"] = _header_safe(to)
+    msg["Subject"] = _header_safe(subject)
     msg.set_content(body)
     return msg
 
