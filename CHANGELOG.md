@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/fantashley/ruyfo-planner/compare/v0.5.0...v0.6.0) (2026-06-23)
+
+
+### Features
+
+* **alerts:** operator email alerts on event create + email confirm ([#27](https://github.com/fantashley/ruyfo-planner/issues/27)) ([154081b](https://github.com/fantashley/ruyfo-planner/commit/154081bacfcc9a137a591abf6da721e7715903e2))
+
 ## [0.5.0](https://github.com/fantashley/ruyfo-planner/compare/v0.4.0...v0.5.0) (2026-06-23)
 
 
