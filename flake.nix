@@ -15,6 +15,24 @@
         "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
+      # nixpkgs #495509: or-tools' checkPhase runs a ctest,
+      # python_contrib_check_dependencies, whose example script does
+      # `from pkg_resources import parse_version`. pkg_resources was removed in
+      # setuptools 81, so recent nixpkgs fails that one obsolete test and never
+      # caches or-tools. Extend the existing ctest exclusion to skip it too.
+      orToolsFix = final: prev: {
+        or-tools = prev.or-tools.overrideAttrs (old: {
+          checkPhase = ''
+            runHook preCheck
+            ctest --output-on-failure -E "python_math_opt_.*|python_contrib_check_dependencies"
+            runHook postCheck
+          '';
+        });
+      };
+      pkgsFor = system: import nixpkgs {
+        inherit system;
+        overlays = [ orToolsFix ];
+      };
       mkZipcodes =
         pkgs:
         pkgs.python313Packages.buildPythonPackage rec {
@@ -52,7 +70,7 @@
       packages = forAllSystems (
         system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = pkgsFor system;
           pythonEnv = mkPythonEnv pkgs;
         in
         {
@@ -83,7 +101,7 @@
       devShells = forAllSystems (
         system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = pkgsFor system;
           pythonEnv = mkPythonEnv pkgs;
         in
         {
