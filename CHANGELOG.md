@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/fantashley/ruyfo-planner/compare/v0.6.0...v0.6.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **build:** skip or-tools pkg_resources ctest so it builds on current nixpkgs ([#29](https://github.com/fantashley/ruyfo-planner/issues/29)) ([3227a90](https://github.com/fantashley/ruyfo-planner/commit/3227a90b2ca3a69eb633c8dc236431d5f6424139))
+
 ## [0.6.0](https://github.com/fantashley/ruyfo-planner/compare/v0.5.0...v0.6.0) (2026-06-23)
 
 
