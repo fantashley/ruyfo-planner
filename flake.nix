@@ -20,15 +20,32 @@
       # `from pkg_resources import parse_version`. pkg_resources was removed in
       # setuptools 81, so recent nixpkgs fails that one obsolete test and never
       # caches or-tools. Extend the existing ctest exclusion to skip it too.
-      orToolsFix = final: prev: {
-        or-tools = prev.or-tools.overrideAttrs (old: {
-          checkPhase = ''
-            runHook preCheck
-            ctest --output-on-failure -E "python_math_opt_.*|python_contrib_check_dependencies"
-            runHook postCheck
-          '';
-        });
-      };
+      orToolsFix =
+        final: prev:
+        let
+          ot = prev.or-tools;
+          # Trip-wire: warn on eval once this workaround is probably obsolete, so
+          # we notice and drop it. Fires if or-tools moves off the version we
+          # validated (9.15), or if nixpkgs' own checkPhase already excludes the
+          # test (i.e. the upstream fix landed). When it fires: verify a plain
+          # `import nixpkgs { inherit system; }` build of or-tools passes, then
+          # delete orToolsFix + pkgsFor and use a bare import again.
+          likelyObsolete =
+            ot.version != "9.15"
+            || nixpkgs.lib.hasInfix "python_contrib_check_dependencies" (toString (ot.checkPhase or ""));
+        in
+        {
+          or-tools =
+            nixpkgs.lib.warnIf likelyObsolete
+              "ruyfo orToolsFix: or-tools ${ot.version} may no longer need the pkg_resources ctest workaround (nixpkgs#495509); verify a plain build and remove the overlay"
+              (ot.overrideAttrs (old: {
+                checkPhase = ''
+                  runHook preCheck
+                  ctest --output-on-failure -E "python_math_opt_.*|python_contrib_check_dependencies"
+                  runHook postCheck
+                '';
+              }));
+        };
       pkgsFor = system: import nixpkgs {
         inherit system;
         overlays = [ orToolsFix ];
