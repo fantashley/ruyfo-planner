@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/fantashley/ruyfo-planner/compare/v0.6.1...v0.6.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* **build:** trip-wire to flag the or-tools overlay when it becomes obsolete ([#31](https://github.com/fantashley/ruyfo-planner/issues/31)) ([136943f](https://github.com/fantashley/ruyfo-planner/commit/136943fadeb86928d255bbfab1ec6c6d1f37a16e))
+
 ## [0.6.1](https://github.com/fantashley/ruyfo-planner/compare/v0.6.0...v0.6.1) (2026-07-11)
 
 
