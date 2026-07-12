@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/fantashley/ruyfo-planner/compare/v0.6.2...v0.6.3) (2026-07-12)
+
+
+### Bug Fixes
+
+* **build:** only override or-tools when the build would actually fail ([#33](https://github.com/fantashley/ruyfo-planner/issues/33)) ([20f580e](https://github.com/fantashley/ruyfo-planner/commit/20f580e2eec245f9dfcf28265a37718b0db4e13d))
+
 ## [0.6.2](https://github.com/fantashley/ruyfo-planner/compare/v0.6.1...v0.6.2) (2026-07-12)
 
 
