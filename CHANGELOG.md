@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/fantashley/ruyfo-planner/compare/v0.6.3...v0.6.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** nix flake update, drop obsolete or-tools overlay, add Dependabot ([#35](https://github.com/fantashley/ruyfo-planner/issues/35)) ([b6fc249](https://github.com/fantashley/ruyfo-planner/commit/b6fc24992adf8e246f64dab5f21129db9f4cb1cd))
+
 ## [0.6.3](https://github.com/fantashley/ruyfo-planner/compare/v0.6.2...v0.6.3) (2026-07-12)
 
 
