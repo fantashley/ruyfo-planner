@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore(ci)
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # flake.lock inputs. GitHub says the nix ecosystem does not yet support
+  # private repositories, so this is a trial.
+  - package-ecosystem: nix
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      flake-inputs:
+        patterns: ["*"]
